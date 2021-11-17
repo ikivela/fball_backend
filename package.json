@@ -1,0 +1,24 @@
+{
+  "name": "fball_stats",
+  "version": "1.0.0",
+  "description": "Webscraping finnish floorball API",
+  "main": "src/backend.js",
+  "scripts": {
+    "backend": "node-dev src/backend.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Ilkka Kivelä",
+  "license": "ISC",
+  "dependencies": {
+    "async": "^3.2.0",
+    "axios": "^0.24.0",
+    "cheerio": "^1.0.0-rc.10",
+    "cors": "^2.8.5",
+    "express": "^4.17.1",
+    "luxon": "^2.1.1",
+    "node-dev": "^7.1.0",
+    "node-libcurl": "^2.3.3",
+    "prettier": "^2.1.2"
+  },
+  "devDependencies": {}
+}

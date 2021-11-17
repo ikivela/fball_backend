@@ -1,0 +1,22 @@
+FROM mhart/alpine-node:16.4.2
+
+ENV APP_DIR /app/backend
+
+# Install pre-requisites
+RUN apk update
+RUN apk add git openssl
+
+# Cache a layer or two, optimize later
+ADD package.json /tmp/package.json
+# Install dependencies
+RUN cd /tmp && npm install --production
+RUN mkdir -p $APP_DIR && cp -a /tmp/node_modules $APP_DIR
+
+# Add app source
+WORKDIR $APP_DIR
+ADD . $APP_DIR
+
+EXPOSE 80
+
+# run application
+CMD [ "sh", "-c", "node src/backend.js" ]
