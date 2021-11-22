@@ -12,11 +12,17 @@ const Stats = require('./Stats');
 /**
  * App Variables
  */
-
+const currentTeam = 'Nibacos';
 const app = express();
-const port = process.env.PORT || '8000';
+const port = process.env.PORT || '80';
 var cors = require('cors');
-var datapath = './data/';
+const { DateTime } = require('luxon');
+const { deepStrictEqual } = require('assert');
+
+require('console-stamp')(console, '[HH:MM:ss.l]');
+
+
+var datapath = path.join(path.resolve(__dirname), '../data/');
 
 /*
  *  App Configuration
@@ -27,22 +33,40 @@ app.use(cors());
  * Routes Definitions
  */
 app.get('/', (req, res) => {
-  res.status(200).json({ message: 'säbästats ok' });
+  res.status(200).json({ message: 'fball_backend ok' });
 });
 
-app.get('/stats', async (req, res) => {
-  let data = await Stats.generate('2020', '28');
-  res.status(200).json(data);
+app.get('/seasons/', async (req, res) => {
+  let files = await fs.readdirSync(datapath);
+  console.log('files', files.length);
+  if (files.length > 0) {
+    files = files.map((file) => {
+      if (file.includes(currentTeam)) return file.substr(0, 4);
+    });
+    console.log(files);
+    res.status(200).json({ message: 'ok', data: files });
+  } else {
+    console.log(files);
+    res.status(404).json({ message: 'not found', data: null });
+  }
 });
 
-app.get('/games/', async (req, res) => {
+app.get('/games/:year?', async (req, res) => {
   var contents;
-  console.time('GET games');
+  let year =
+    req.params.year && req.params.year.length == 4
+      ? req.params.year
+      : DateTime.now().toFormat('yyyy');
+
+  console.log('GET games for %s', year);
+
   try {
-    let data = fs.readFileSync(datapath + 'nibacos_games.json', 'utf8');
-    data = JSON.parse(data);
-    console.timeEnd('GET games');
-    return res.status(200).json(data);
+    let filepath = `${datapath}${year}-${currentTeam}_games.json`;
+    if (fs.existsSync(filepath)) {
+      res.status(200).sendFile(filepath);
+    } else {
+      return res.status(404).json({ message: 'Not found' });
+    }
   } catch (err) {
     console.log(err);
     res.status(400).json(err);
@@ -55,6 +79,6 @@ app.get('/games/', async (req, res) => {
 
 app.listen(port, () => {
   console.log(
-    `Säbästats server, listening to requests on http://localhost:${port}`
+    `fball_backend running, listening to requests on http://localhost:${port}`
   );
 });

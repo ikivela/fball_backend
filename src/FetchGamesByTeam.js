@@ -3,11 +3,12 @@ var fs = require('fs');
 var async = require('async');
 var cheerio = require('cheerio');
 const { DateTime } = require('luxon');
+// add timestamps in front of log messages
+require('console-stamp')(console, '[HH:MM:ss.l]');
 
 const currentTeam = 'Nibacos';
-
 var fb_areas_url =
-  'http://tilastopalvelu.fi/fb/modules/mod_statisticshistory/helper/areas.php?level='; //2020';
+  'http://tilastopalvelu.fi/fb/modules/mod_statistics/helper/areas.php?level='; //2020';
 var fb_groups_url =
   'http://tilastopalvelu.fi/fb/modules/mod_statistics/helper/statgroups.php?level='; //2020';
 var fb_games_url =
@@ -16,11 +17,9 @@ var fb_games_stats =
   'http://tilastopalvelu.fi/fb/modules/mod_schedule/helper/game.php?gameid=';
 //&select=&id=&teamid=&rinkid=&season=2020&rdm=0.4436202946460597';
 
-var basepath = './games/';
+var basepath = './data/';
 
-levels = [];
-
-let nibacos_games = [];
+let currentTeam_games = [];
 
 var getLevels = async function (season) {
   let seasons = {
@@ -33,9 +32,10 @@ var getLevels = async function (season) {
     2019: 9,
     2020: 10,
   };
+  let levels = [];
 
   let url = 'http://tilastopalvelu.fi/fb/';
-  if (season && season != '2021') {
+  if (season && season != DateTime.now().toFormat('yyyy')) {
     url = `http://tilastopalvelu.fi/fb/index.php/component/content/article?id=12&ssnid=${seasons[season]}`;
   }
   console.log(url);
@@ -49,60 +49,88 @@ var getLevels = async function (season) {
       //console.log(`[${value}][${level}]`);
       if (value != '') levels.push({ id: value, name: level });
     });
+  return levels;
 };
 
 var getAreas = async function (param) {
   //console.log("GetAreas", param);
-  var path = basepath + param.season + '-areas-' + param.level.id + '.json';
-  if (!fs.existsSync(path)) {
-    areas = await axios.get(
-      fb_areas_url + param.level.id + '&season=' + param.season
-    );
-    fs.writeFileSync(path, JSON.stringify(areas.data));
-  } else {
-    areas = JSON.parse(fs.readFileSync(path));
-  }
+  let areas = await axios.get(
+    fb_areas_url + param.level.id + '&season=' + param.season
+  );
+  return areas.data;
 };
 
 var getGroups = async function (param) {
-  let groups_all = '';
+  let groups = '';
+  if (param.season && param.season != DateTime.now().toFormat('yyyy'))
+    fb_groups_url = fb_groups_url.replace(
+      '/mod_statistics/',
+      '/mod_statisticshistory/'
+    );
+
   let url = `${fb_groups_url}${param.level}&area=&season=${param.season}`;
-  groups_all = await axios.get(url);
-  groups_all = groups_all.data;
-  return groups_all;
+  console.log(url);
+  groups = await axios.get(url);
+  groups = groups.data;
+  //console.log(groups);
+  return groups.statgroups;
 };
 
 var getGames = async function (param) {
   // groupID, season, level, teamid, rinkid) {
   //console.log(param);
-  let season = param.season ? param.season : DateTime.now().toFormat('yyyy');
+  if (param.season && param.season != DateTime.now().toFormat('yyyy'))
+    fb_games_url = fb_games_url.replace(
+      '/mod_schedule/',
+      '/mod_schedulehistory/'
+    );
+
   let teamid = param.teamid ? param.teamid : '';
   let rinkid = param.rinkid ? param.rinkid : '';
-  var path = `${basepath}${season}-games-${param.level.id}-${param.groupID}.json`;
   let random = Math.random();
   let games = [];
   let url = `${fb_games_url}${param.groupID}&select=&id=&teamid=${teamid}&rinkid=${rinkid}&rdm=${random}&season=${param.season}`;
-  let response = await axios.post(url, {});
-  games = response.data.games;
+  try {
+    let response = await axios.post(url, {});
+    games = response.data.games;
+  } catch (e) {
+    console.log(url);
+    console.error(e);
+    games = [];
+  }
+
   return games;
 };
 
-async function getTeamGames(_season) {
-  _season = _season ? _season : '';
+function isTooOld( file ) {
 
-  if (!fs.existsSync(basepath + 'nibacos_games.json')) {
-    await getLevels(_season);
-    for (let level of levels) {
+  const file_stats = fs.statSync(file, interval);
+  file_time = file_stats.mtime; //.toString();
+  return ( DateTime.fromJSDate(file_time).toMillis() < DateTime.now().minus(interval).toMillis() ) ? true : false;
+}
+
+async function getTeamGames(params) {
+
+  _season = params.season ? params.season : DateTime.now().toFormat('yyyy');
+  let total = 0;
+
+  if (
+    !fs.existsSync(`${basepath}${_season}-${currentTeam}_games.json`) ||
+    params.update
+  ) {
+    let _levels = await getLevels(_season);
+    console.log(`Season ${_season}`);
+    for (let level of _levels) {
       //console.log(level, _season);
       let groups = await getGroups({ season: _season, level: level.id });
-      console.log(groups);
-      for (let group of groups.statgroups) {
+      for (let group of groups) {
         let games = await getGames({
           groupID: group.StatGroupID,
           season: _season,
           level: level,
         });
-        console.log(level.name, group.Name, 'otteluita ', games);
+        console.log(`${level.name} ${group.Name} games [${games.length}]`);
+        total += games.length;
 
         if (games) {
           games = games.filter((x) => {
@@ -122,7 +150,7 @@ async function getTeamGames(_season) {
                 game.AwayTeamName,
                 game.RinkName
               );*/
-              nibacos_games.push({
+              currentTeam_games.push({
                 ...game,
                 group: group.Name,
                 class: level.name,
@@ -136,25 +164,21 @@ async function getTeamGames(_season) {
     }
 
     fs.writeFileSync(
-      basepath + 'nibacos_games.json',
-      JSON.stringify(nibacos_games),
+      `${basepath}${_season}-${currentTeam}_games.json`,
+      JSON.stringify({
+        updated: DateTime.now().toISODate(),
+        games: currentTeam_games,
+      }),
       'utf8'
     );
   } else {
-    console.log('Reading nibacos_games.json');
-    nibacos_games = JSON.parse(
-      fs.readFileSync(basepath + 'nibacos_games.json')
+    console.log(`Reading ${_season}-${currentTeam}_games.json`);
+    currentTeam_games = JSON.parse(
+      fs.readFileSync(`${basepath}${_season}-${currentTeam}_games.json`)
     );
   }
 
-  console.log('Found %s nibacos games', nibacos_games.length);
-  //for (let game of nibacos_games) {
-  //console.log(game);
-  //}
-  //await getStats();
-  //await getStats( '2020', '27' );
-  //for (let _player of players)
-  //  console.log(_player.name, _player.goals, _player.assists, _player.total);
+  console.log('Found %s %s games ', currentTeam_games.length, currentTeam);
 }
 
 module.exports = {
@@ -162,7 +186,7 @@ module.exports = {
 };
 
 if (module.parent === null) {
-  getTeamGames();
+  getTeamGames({ season: process.argv[2], update: true });
 }
 
 //runScript();
