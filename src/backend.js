@@ -14,13 +14,13 @@ const Stats = require('./Stats');
  */
 const currentTeam = 'Nibacos';
 const app = express();
-const port = process.env.PORT || '80';
+const port = process.env.PORT || '3000';
 var cors = require('cors');
 const { DateTime } = require('luxon');
 const { deepStrictEqual } = require('assert');
+const axios = require('axios');
 
 require('console-stamp')(console, '[HH:MM:ss.l]');
-
 
 var datapath = path.join(path.resolve(__dirname), '../data/');
 
@@ -43,16 +43,25 @@ app.get('/seasons/', async (req, res) => {
     files = files.map((file) => {
       if (file.includes(currentTeam)) return file.substr(0, 4);
     });
-    console.log(files);
     res.status(200).json({ message: 'ok', data: files });
   } else {
-    console.log(files);
     res.status(404).json({ message: 'not found', data: null });
+  }
+});
+app.get('/game/:year/:id', async (req, res) => {
+  console.time('getGameStats');
+  var data = await getGameStats(req.params.id, req.params.season);
+  if (data && data.length > 0) {
+    var events = parseEvents(data, req.params.id);
+    console.log('game stats', req.params.id, req.params.year, events.length);
+    console.timeEnd('getGameStats');
+    res.status(200).json(events);
+  } else {
+    res.status(404).json({});
   }
 });
 
 app.get('/games/:year?', async (req, res) => {
-  var contents;
   let year =
     req.params.year && req.params.year.length == 4
       ? req.params.year
@@ -82,3 +91,47 @@ app.listen(port, () => {
     `fball_backend running, listening to requests on http://localhost:${port}`
   );
 });
+
+function parseEvents(response, gameid) {
+  var actions = response.split('\n');
+  actions = actions.filter((x) => x.includes(gameid));
+  actions = actions[0].split(';');
+  var events = [];
+
+  for (var i = 0; i < actions.length; i++) {
+    var action = actions[i].split(':');
+    var stat = '';
+    // GOAL
+    if (action[1] == '1') {
+      stat = {
+        event: 'goal',
+        time: action[2],
+        result: action[3],
+        yv_av: action[4],
+        team: action[5],
+        scorer: action[6],
+        assist: action[7].replace(/\d{1,2} /, ''),
+      };
+      events.push(stat);
+    } else if (action[1] == '2') {
+      stat = {
+        event: 'penalty',
+        time: action[2],
+        penalty_time: action[3] + ' min',
+        team: action[4],
+        player: action[5],
+        reason: action[7].split('|')[0],
+      };
+      events.push(stat);
+    }
+  }
+  return events;
+}
+
+var getGameStats = async function (gameID, season, level) {
+  let game_url = `http://tilastopalvelu.fi/fb/modules/mod_gamereport/helper/actions.php?gameid=${gameID}&season=${season}&rnd=${Math.random()}`;
+  if (season && season != DateTime.now().toFormat('yyyy'))
+    game_url = game_url.replace('/mod_gamereport/', '/mod_gamereporthistory');
+  stats = await axios.post(game_url);
+  return stats.data;
+};

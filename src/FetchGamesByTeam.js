@@ -7,6 +7,8 @@ const { DateTime } = require('luxon');
 require('console-stamp')(console, '[HH:MM:ss.l]');
 
 const currentTeam = 'Nibacos';
+const days_old = 7;
+
 var fb_areas_url =
   'http://tilastopalvelu.fi/fb/modules/mod_statistics/helper/areas.php?level='; //2020';
 var fb_groups_url =
@@ -102,27 +104,47 @@ var getGames = async function (param) {
   return games;
 };
 
-function isTooOld( file ) {
-
-  const file_stats = fs.statSync(file, interval);
-  file_time = file_stats.mtime; //.toString();
-  return ( DateTime.fromJSDate(file_time).toMillis() < DateTime.now().minus(interval).toMillis() ) ? true : false;
+function isTooOld(file, interval = { days: days_old }) {
+  try {
+    const file_stats = fs.existsSync(file) ? fs.statSync(file) : undefined;
+    if (!file_stats) return false;
+    file_time = file_stats.mtime; //.toString();
+    return DateTime.fromJSDate(file_time).toMillis() <
+      DateTime.now().minus(interval).toMillis()
+      ? true
+      : false;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
 }
 
 async function getTeamGames(params) {
-
   _season = params.season ? params.season : DateTime.now().toFormat('yyyy');
   let total = 0;
 
+  if (params && params.update)
+    params.update = params.update == 'true' ? true : false;
+
   if (
-    !fs.existsSync(`${basepath}${_season}-${currentTeam}_games.json`) ||
+    isTooOld(`${basepath}${_season}-${currentTeam}_games.json`, {
+      days: days_old,
+    }) ||
     params.update
   ) {
+    console.log(
+      `File ${basepath}${_season}-${currentTeam}_games.json is too old, update`
+    );
+
     let _levels = await getLevels(_season);
     console.log(`Season ${_season}`);
     for (let level of _levels) {
       //console.log(level, _season);
       let groups = await getGroups({ season: _season, level: level.id });
+      if (!Array.isArray(groups)) {
+        console.error('Could not fetch game groups');
+        return;
+      }
       for (let group of groups) {
         let games = await getGames({
           groupID: group.StatGroupID,
@@ -165,10 +187,7 @@ async function getTeamGames(params) {
 
     fs.writeFileSync(
       `${basepath}${_season}-${currentTeam}_games.json`,
-      JSON.stringify({
-        updated: DateTime.now().toISODate(),
-        games: currentTeam_games,
-      }),
+      JSON.stringify(currentTeam_games),
       'utf8'
     );
   } else {
@@ -186,7 +205,7 @@ module.exports = {
 };
 
 if (module.parent === null) {
-  getTeamGames({ season: process.argv[2], update: true });
+  getTeamGames({ season: process.argv[2], update: process.argv[3] });
 }
 
 //runScript();
