@@ -50,9 +50,10 @@ app.get('/seasons/', async (req, res) => {
 });
 app.get('/game/:year/:id', async (req, res) => {
   console.time('getGameStats');
-  var data = await getGameStats(req.params.id, req.params.season);
+  var data = await getGameStats(req.params.id, req.params.year);
+  //console.log('getGamesStats data:', data);
   if (data && data.length > 0) {
-    var events = parseEvents(data, req.params.id);
+    var events = parseEvents(data, req.params.id, req.params.year);
     console.log('game stats', req.params.id, req.params.year, events.length);
     console.timeEnd('getGameStats');
     res.status(200).json(events);
@@ -92,10 +93,11 @@ app.listen(port, () => {
   );
 });
 
-function parseEvents(response, gameid) {
+function parseEvents(response, gameid, year) {
   var actions = response.split('\n');
   actions = actions.filter((x) => x.includes(gameid));
   actions = actions[0].split(';');
+  //console.log(actions);
   var events = [];
 
   for (var i = 0; i < actions.length; i++) {
@@ -128,10 +130,10 @@ function parseEvents(response, gameid) {
   return events;
 }
 
-var getGameStats = async function (gameID, season, level) {
-  let game_url = `http://tilastopalvelu.fi/fb/modules/mod_gamereport/helper/actions.php?gameid=${gameID}&season=${season}&rnd=${Math.random()}`;
-  if (season && season != DateTime.now().toFormat('yyyy'))
-    game_url = game_url.replace('/mod_gamereport/', '/mod_gamereporthistory');
+var getGameStats = async function (gameID, year) {
+  let game_url = `http://tilastopalvelu.fi/fb/modules/mod_gamereport/helper/actions.php?gameid=${gameID}&season=${year}&rnd=${Math.random()}`;
+  if (year && year != DateTime.now().toFormat('yyyy'))
+    game_url = game_url.replace('/mod_gamereport/', '/mod_gamereporthistory/');
   stats = await axios.post(game_url);
   return stats.data;
 };
