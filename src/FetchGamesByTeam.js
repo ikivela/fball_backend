@@ -1,26 +1,21 @@
 var axios = require('axios');
 var fs = require('fs');
-var async = require('async');
 var cheerio = require('cheerio');
 const { DateTime } = require('luxon');
 // add timestamps in front of log messages
-require('console-stamp')(console, '[HH:MM:ss.l]');
+require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss.l');
 
-const currentTeam = 'Nibacos';
-const days_old = 7;
-
-var fb_areas_url =
+const fb_areas_url =
   'http://tilastopalvelu.fi/fb/modules/mod_statistics/helper/areas.php?level='; //2020';
-var fb_groups_url =
+const fb_groups_url =
   'http://tilastopalvelu.fi/fb/modules/mod_statistics/helper/statgroups.php?level='; //2020';
-var fb_games_url =
+const fb_games_url =
   'http://tilastopalvelu.fi/fb/modules/mod_schedule/helper/games.php?statgroupid=';
 var fb_games_stats =
   'http://tilastopalvelu.fi/fb/modules/mod_schedule/helper/game.php?gameid=';
 //&select=&id=&teamid=&rinkid=&season=2020&rdm=0.4436202946460597';
 
 var basepath = './data/';
-
 let currentTeam_games = [];
 
 var getLevels = async function (season) {
@@ -37,7 +32,7 @@ var getLevels = async function (season) {
   let levels = [];
 
   let url = 'http://tilastopalvelu.fi/fb/';
-  if (season && season != DateTime.now().toFormat('yyyy')) {
+  if (season !== 'current') {
     url = `http://tilastopalvelu.fi/fb/index.php/component/content/article?id=12&ssnid=${seasons[season]}`;
   }
   console.log(url);
@@ -54,26 +49,18 @@ var getLevels = async function (season) {
   return levels;
 };
 
-var getAreas = async function (param) {
-  //console.log("GetAreas", param);
-  let areas = await axios.get(
-    fb_areas_url + param.level.id + '&season=' + param.season
-  );
-  return areas.data;
-};
-
 var getGroups = async function (param) {
   let groups = '';
-  if (param.season)
+
+  let url = `${fb_groups_url}${param.level}&area=`;
+  if (param.season !== 'current') {
     fb_groups_url = fb_groups_url.replace(
       '/mod_statistics/',
       '/mod_statisticshistory/'
     );
+    url = `${url}&season=${param.season}`;
+  }
 
-  // Fix season parameter(?)
-  param.season = param.season == '2020' ? '2021' : param.season;
-
-  let url = `${fb_groups_url}${param.level}&area=&season=${param.season}`;
   //console.log(url);
   groups = await axios.get(url);
   groups = groups.data;
@@ -83,18 +70,22 @@ var getGroups = async function (param) {
 
 var getGames = async function (param) {
   // groupID, season, level, teamid, rinkid) {
-  if (param.season)
+  let url = `${fb_games_url}${
+    param.groupID
+  }&select=&id=&teamid=&rinkid=&rdm=${Math.random()}`;
+
+  if (param.season !== 'current') {
     fb_games_url = fb_games_url.replace(
       '/mod_schedule/',
       '/mod_schedulehistory/'
     );
-  param.season = param.season == '2020' ? '2021' : param.season;
+    url = `${url}&season=${param.season}`;
+  }
 
   let teamid = param.teamid ? param.teamid : '';
   let rinkid = param.rinkid ? param.rinkid : '';
   let random = Math.random();
   let games = [];
-  let url = `${fb_games_url}${param.groupID}&select=&id=&teamid=${teamid}&rinkid=${rinkid}&rdm=${random}&season=${param.season}`;
   try {
     //console.log(url);
     let response = await axios.post(url, {});
@@ -124,11 +115,16 @@ function isTooOld(file, interval = { days: days_old }) {
 }
 
 async function getTeamGames(params) {
-  _season = params.season ? params.season : DateTime.now().toFormat('yyyy');
-  let total = 0;
+  // Check the currentSeason's year, i.e. when to switch new season
+  const currentTeam = params.team ? params.team : 'Nibacos';
+  const days_old = params.days ? params.days : 7;
+  var total = 0;
 
   if (params && params.update)
-    params.update = params.update == 'true' ? true : false;
+    params.update = params.update == true ? true : false;
+
+  var _season = params.season ? params.season : 'current';
+  console.log('Update: %s, season: %s', params.update, _season);
 
   if (
     isTooOld(`${basepath}${_season}-${currentTeam}_games.json`, {
@@ -145,7 +141,10 @@ async function getTeamGames(params) {
 
     for (let level of _levels) {
       //console.log(level, _season);
-      let groups = await getGroups({ season: _season, level: level.id });
+      let groups = await getGroups({
+        season: _season,
+        level: level.id,
+      });
       if (!Array.isArray(groups)) {
         console.error('Could not fetch game groups');
         return;
@@ -156,7 +155,7 @@ async function getTeamGames(params) {
           level: level,
           season: _season,
         });
-        console.log(`${level.name} ${group.Name} games [${games.length}]`);
+        console.log(`${level.name} ${group.Name} [${games.length}]`);
         total += games.length;
 
         if (games) {
@@ -169,14 +168,6 @@ async function getTeamGames(params) {
 
           if (games.length > 0) {
             for (let game of games) {
-              /*            console.log(
-                game.UniqueID,
-                game.GameDate,
-                game.Result,
-                game.HomeTeamName,
-                game.AwayTeamName,
-                game.RinkName
-              );*/
               currentTeam_games.push({
                 ...game,
                 group: group.Name,
@@ -210,7 +201,35 @@ module.exports = {
 };
 
 if (module.parent === null) {
-  getTeamGames({ season: process.argv[2], update: process.argv[3] });
+  const yargs = require('yargs');
+  const argv = yargs
+    .option('season', {
+      alias: 's',
+      description: 'season to fetch',
+      type: 'number',
+    })
+    .option('update', {
+      alias: 'u',
+      description: 'Update the season datafile',
+      type: 'boolean',
+    })
+    .option('team', {
+      description: 'The team name to search for',
+      type: 'string',
+    })
+    .help()
+    .alias('help', 'h').argv;
+
+  if (argv.time) {
+    console.log('The current time is: ', new Date().toLocaleTimeString());
+  }
+
+  if (!argv.team) {
+    console.log('Use --team teamname to search your team');
+    process.exit(-1);
+  }
+
+  getTeamGames({ season: argv.season, update: argv.update, team: argv.team });
 }
 
 //runScript();
