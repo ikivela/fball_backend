@@ -16,11 +16,9 @@ const currentTeam = 'Nibacos';
 const app = express();
 const port = process.env.PORT || '3000';
 var cors = require('cors');
-const { DateTime } = require('luxon');
-const { deepStrictEqual } = require('assert');
 const axios = require('axios');
 
-require('console-stamp')(console, '[HH:MM:ss.l]');
+require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss.l');
 
 var datapath = path.join(path.resolve(__dirname), '../data/');
 
@@ -41,7 +39,7 @@ app.get('/seasons/', async (req, res) => {
   console.log('files', files.length);
   if (files.length > 0) {
     files = files.map((file) => {
-      if (file.includes(currentTeam)) return file.substr(0, 4);
+      if (file.includes(currentTeam)) return file.split('-')[0];
     });
     files = files.sort((a, b) => (a > b ? -1 : 1));
     res.status(200).json({ message: 'ok', data: files });
@@ -49,13 +47,18 @@ app.get('/seasons/', async (req, res) => {
     res.status(404).json({ message: 'not found', data: null });
   }
 });
-app.get('/game/:year/:id', async (req, res) => {
-  console.time('getGameStats');
-  var data = await getGameStats(req.params.id, req.params.year);
+app.get('/gamestats/', async (req, res) => {
+  console.time('getGameStats:', req.query);
+  var data = await getGameStats(req.query.gameid, req.query.season);
 
   if (data && data.length > 0) {
-    var events = parseEvents(data, req.params.id, req.params.year);
-    console.log('game stats', req.params.id, req.params.year, events.length);
+    var events = parseEvents(data, req.query.gameid, req.query.season);
+    console.log(
+      'game stats',
+      req.query.gameid,
+      req.query.season,
+      events.length
+    );
     console.timeEnd('getGameStats');
     res.status(200).json(events);
   } else {
@@ -63,12 +66,8 @@ app.get('/game/:year/:id', async (req, res) => {
   }
 });
 
-app.get('/games/:year?', async (req, res) => {
-  let year =
-    req.params.year && req.params.year.length == 4
-      ? req.params.year
-      : DateTime.now().toFormat('yyyy');
-
+app.get('/games/', async (req, res) => {
+  let year = req.query.year ? req.query.year : 'current';
   console.log('GET games for %s', year);
 
   try {
@@ -133,13 +132,13 @@ function parseEvents(response, gameid, year) {
   return events;
 }
 
-var getGameStats = async function (gameID, year) {
-  let game_url = `http://tilastopalvelu.fi/fb/modules/mod_gamereport/helper/actions.php?gameid=${gameID}&season=${
-    year == '2020' ? '2021' : year
-  }&rnd=${Math.random()}`;
+var getGameStats = async function (gameID, season) {
+  let game_url = `http://tilastopalvelu.fi/fb/modules/mod_gamereport/helper/actions.php?gameid=${gameID}&rnd=${Math.random()}`;
 
-  if (year && year != DateTime.now().toFormat('yyyy'))
+  if (season !== 'current') {
     game_url = game_url.replace('/mod_gamereport/', '/mod_gamereporthistory/');
+    game_url = `${game_url}&season=${season}`;
+  }
   console.log('game url', game_url);
   stats = await axios.post(game_url);
   return stats.data;
