@@ -43,6 +43,7 @@ app.get('/seasons/', async (req, res) => {
     files = files.map((file) => {
       if (file.includes(currentTeam)) return file.substr(0, 4);
     });
+    files = files.sort((a, b) => (a > b ? -1 : 1));
     res.status(200).json({ message: 'ok', data: files });
   } else {
     res.status(404).json({ message: 'not found', data: null });
@@ -51,14 +52,14 @@ app.get('/seasons/', async (req, res) => {
 app.get('/game/:year/:id', async (req, res) => {
   console.time('getGameStats');
   var data = await getGameStats(req.params.id, req.params.year);
-  //console.log('getGamesStats data:', data);
+
   if (data && data.length > 0) {
     var events = parseEvents(data, req.params.id, req.params.year);
     console.log('game stats', req.params.id, req.params.year, events.length);
     console.timeEnd('getGameStats');
     res.status(200).json(events);
   } else {
-    res.status(404).json({});
+    res.status(404).end();
   }
 });
 
@@ -94,8 +95,10 @@ app.listen(port, () => {
 });
 
 function parseEvents(response, gameid, year) {
+  //console.log('parseEvents', response);
   var actions = response.split('\n');
   actions = actions.filter((x) => x.includes(gameid));
+  if (actions.length == 0) return [];
   actions = actions[0].split(';');
   //console.log(actions);
   var events = [];
@@ -131,9 +134,13 @@ function parseEvents(response, gameid, year) {
 }
 
 var getGameStats = async function (gameID, year) {
-  let game_url = `http://tilastopalvelu.fi/fb/modules/mod_gamereport/helper/actions.php?gameid=${gameID}&season=${year}&rnd=${Math.random()}`;
+  let game_url = `http://tilastopalvelu.fi/fb/modules/mod_gamereport/helper/actions.php?gameid=${gameID}&season=${
+    year == '2020' ? '2021' : year
+  }&rnd=${Math.random()}`;
+
   if (year && year != DateTime.now().toFormat('yyyy'))
     game_url = game_url.replace('/mod_gamereport/', '/mod_gamereporthistory/');
+  console.log('game url', game_url);
   stats = await axios.post(game_url);
   return stats.data;
 };

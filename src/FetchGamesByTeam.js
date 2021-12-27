@@ -64,14 +64,17 @@ var getAreas = async function (param) {
 
 var getGroups = async function (param) {
   let groups = '';
-  if (param.season && param.season != DateTime.now().toFormat('yyyy'))
+  if (param.season)
     fb_groups_url = fb_groups_url.replace(
       '/mod_statistics/',
       '/mod_statisticshistory/'
     );
 
+  // Fix season parameter(?)
+  param.season = param.season == '2020' ? '2021' : param.season;
+
   let url = `${fb_groups_url}${param.level}&area=&season=${param.season}`;
-  console.log(url);
+  //console.log(url);
   groups = await axios.get(url);
   groups = groups.data;
   //console.log(groups);
@@ -80,12 +83,12 @@ var getGroups = async function (param) {
 
 var getGames = async function (param) {
   // groupID, season, level, teamid, rinkid) {
-  //console.log(param);
-  if (param.season && param.season != DateTime.now().toFormat('yyyy'))
+  if (param.season)
     fb_games_url = fb_games_url.replace(
       '/mod_schedule/',
       '/mod_schedulehistory/'
     );
+  param.season = param.season == '2020' ? '2021' : param.season;
 
   let teamid = param.teamid ? param.teamid : '';
   let rinkid = param.rinkid ? param.rinkid : '';
@@ -93,6 +96,7 @@ var getGames = async function (param) {
   let games = [];
   let url = `${fb_games_url}${param.groupID}&select=&id=&teamid=${teamid}&rinkid=${rinkid}&rdm=${random}&season=${param.season}`;
   try {
+    //console.log(url);
     let response = await axios.post(url, {});
     games = response.data.games;
   } catch (e) {
@@ -138,6 +142,7 @@ async function getTeamGames(params) {
 
     let _levels = await getLevels(_season);
     console.log(`Season ${_season}`);
+
     for (let level of _levels) {
       //console.log(level, _season);
       let groups = await getGroups({ season: _season, level: level.id });
@@ -148,8 +153,8 @@ async function getTeamGames(params) {
       for (let group of groups) {
         let games = await getGames({
           groupID: group.StatGroupID,
-          season: _season,
           level: level,
+          season: _season,
         });
         console.log(`${level.name} ${group.Name} games [${games.length}]`);
         total += games.length;
