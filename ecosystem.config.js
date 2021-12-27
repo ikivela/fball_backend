@@ -17,7 +17,7 @@ module.exports = {
     },
     {
       name: 'fball_fetch_games_job',
-      script: 'node src/FetchGamesByTeam.js 2021 false',
+      script: 'node src/FetchGamesByTeam.js --team Nibacos',
       instances: 1,
       exec_mode: 'fork',
       cron_restart: '0 3 * * *',
