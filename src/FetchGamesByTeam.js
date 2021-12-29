@@ -102,7 +102,10 @@ var getGames = async function (param) {
 function isTooOld(file, interval = { days: days_old }) {
   try {
     const file_stats = fs.existsSync(file) ? fs.statSync(file) : undefined;
-    if (!file_stats) return false;
+    if (!file_stats) {
+      console.log(`${file} does not exist`);
+      return true;
+    }
     file_time = file_stats.mtime; //.toString();
     return DateTime.fromJSDate(file_time).toMillis() <
       DateTime.now().minus(interval).toMillis()
@@ -123,8 +126,8 @@ async function getTeamGames(params) {
   if (params && params.update)
     params.update = params.update == true ? true : false;
 
-  var _season = params.season ? params.season : 'current';
-  console.log('Update: %s, season: %s', params.update, _season);
+  var _season = !params.season ? 'current' : params.season;
+  console.log('Params: update=%s, season=%s', params.update, _season);
 
   if (
     isTooOld(`${basepath}${_season}-${currentTeam}_games.json`, {
@@ -196,40 +199,38 @@ async function getTeamGames(params) {
   console.log('Found %s %s games ', currentTeam_games.length, currentTeam);
 }
 
-module.exports = {
-  getGames: getTeamGames,
-};
+const yargs = require('yargs');
+const argv = yargs
+  .option('season', {
+    alias: 's',
+    description: 'season to fetch',
+    type: 'number',
+  })
+  .option('update', {
+    alias: 'u',
+    description: 'Update the season datafile',
+    type: 'boolean',
+  })
+  .option('days', {
+    alias: 'd',
+    description: 'Number of days after the season datafile gets updated',
+    type: 'number',
+  })
+  .option('team', {
+    description: 'The team name to search for',
+    type: 'string',
+  })
+  .help()
+  .alias('help', 'h').argv;
 
-if (module.parent === null) {
-  const yargs = require('yargs');
-  const argv = yargs
-    .option('season', {
-      alias: 's',
-      description: 'season to fetch',
-      type: 'number',
-    })
-    .option('update', {
-      alias: 'u',
-      description: 'Update the season datafile',
-      type: 'boolean',
-    })
-    .option('team', {
-      description: 'The team name to search for',
-      type: 'string',
-    })
-    .help()
-    .alias('help', 'h').argv;
-
-  if (argv.time) {
-    console.log('The current time is: ', new Date().toLocaleTimeString());
-  }
-
-  if (!argv.team) {
-    console.log('Use --team teamname to search your team');
-    process.exit(-1);
-  }
-
-  getTeamGames({ season: argv.season, update: argv.update, team: argv.team });
+if (!argv.team) {
+  console.log('Use --team teamname to search your team');
+  process.exit(-1);
 }
 
-//runScript();
+getTeamGames({
+  season: argv.season,
+  update: argv.update,
+  days: argv.days,
+  team: argv.team,
+});
