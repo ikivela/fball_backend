@@ -38,8 +38,9 @@ app.get('/seasons/', async (req, res) => {
   let files = await fs.readdirSync(datapath);
   console.log('files', files.length);
   if (files.length > 0) {
+    files = files.filter( file => file.includes(currentTeam));
     files = files.map((file) => {
-      if (file.includes(currentTeam)) return file.split('-')[0];
+      return file.split('-')[0];
     });
     files = files.sort((a, b) => (a > b ? -1 : 1));
     res.status(200).json({ message: 'ok', data: files });
@@ -47,8 +48,35 @@ app.get('/seasons/', async (req, res) => {
     res.status(404).json({ message: 'not found', data: null });
   }
 });
+
+app.get('/seasonstats/', async (req, res) => {
+  try {
+    let stat_files = await fs.readdirSync(datapath + 'stats');
+    let stats = [];
+    let data = '';
+    let classname = '';
+    for (let _stat of stat_files) {
+      classname = _stat.split('-');
+      let _class = '';
+      if (classname.length > 3) _class = classname[1].concat('-', classname[2]);
+      else _class = classname[1];
+      _class = _class.replace(/__/g, '-');
+      _class = _class.replace(/_/g, ' ');
+
+      data = JSON.parse(fs.readFileSync(datapath + 'stats/' + _stat));
+      if (data.length > 0) {
+        //console.log('class', classname[0], _class);
+        stats.push({ season: classname[0], class: _class, stats: data });
+      }
+    }
+    res.status(200).json(stats);
+  } catch (_err) {
+    console.error(_err);
+    res.status(500).end();
+  }
+});
 app.get('/gamestats/', async (req, res) => {
-  console.time('getGameStats:', req.query);
+  console.time('getGameStats-' + req.query.gameid);
   var data = await getGameStats(req.query.gameid, req.query.season);
 
   if (data && data.length > 0) {
@@ -59,7 +87,7 @@ app.get('/gamestats/', async (req, res) => {
       req.query.season,
       events.length
     );
-    console.timeEnd('getGameStats');
+    console.timeEnd('getGameStats-' + req.query.gameid);
     res.status(200).json(events);
   } else {
     res.status(404).end();
