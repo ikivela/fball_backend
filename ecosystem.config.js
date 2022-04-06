@@ -24,5 +24,14 @@ module.exports = {
       watch: false,
       autorestart: false,
     },
+    {
+      name: 'fball_fetch_games_job',
+      script: 'npm run updateStats',
+      instances: 1,
+      exec_mode: 'fork',
+      cron_restart: '0 22 * * *',
+      watch: false,
+      autorestart: false,
+    },
   ],
 };

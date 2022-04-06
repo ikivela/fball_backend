@@ -5,6 +5,8 @@
   "main": "src/backend.js",
   "scripts": {
     "fetch": "node src/FetchGamesByTeam.js",
+    "getResults": "node src/FetchStatsOfGames.js",
+    "updateStats": "node src/StatsByTeam.js",
     "backend": "node src/backend.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
