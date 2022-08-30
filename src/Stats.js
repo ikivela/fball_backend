@@ -15,7 +15,7 @@ var fb_games_stats =
 //&select=&id=&teamid=&rinkid=&season=2020&rdm=0.4436202946460597';
 
 var players = [];
-var basepath = './stats/';
+var basepath = '../data/';
 
 var addStat = async function (scorer, assistant, gameID) {
   gameID = parseInt(gameID);
@@ -122,6 +122,7 @@ var getGames = async function (groupID, season, level, teamid, rinkid) {
         season
     );
     games = response.data.games;
+    
     fs.writeFileSync(path, JSON.stringify(games));
   } else {
     games = JSON.parse(fs.readFileSync(path));
