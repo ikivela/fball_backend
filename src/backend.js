@@ -12,13 +12,15 @@ const Stats = require('./Stats');
 /**
  * App Variables
  */
+
+require('dotenv').config();
+require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss.l');
+
 const currentTeam = 'Nibacos';
 const app = express();
 const port = process.env.PORT || '3000';
 var cors = require('cors');
 const axios = require('axios');
-
-require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss.l');
 
 var datapath = path.join(path.resolve(__dirname), '../data/');
 
@@ -38,7 +40,7 @@ app.get('/seasons/', async (req, res) => {
   let files = await fs.readdirSync(datapath);
   console.log('files', files.length);
   if (files.length > 0) {
-    files = files.filter( file => file.includes(currentTeam));
+    files = files.filter((file) => file.includes(currentTeam));
     files = files.map((file) => {
       return file.split('-')[0];
     });
