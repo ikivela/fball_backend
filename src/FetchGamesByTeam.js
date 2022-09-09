@@ -4,12 +4,11 @@ var cheerio = require('cheerio');
 const { DateTime } = require('luxon');
 // add timestamps in front of log messages
 require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss.l');
-
-const fb_areas_url =
+var fb_areas_url =
   'http://tilastopalvelu.fi/fb/modules/mod_statistics/helper/areas.php?level='; //2020';
-const fb_groups_url =
+var fb_groups_url =
   'http://tilastopalvelu.fi/fb/modules/mod_statistics/helper/statgroups.php?level='; //2020';
-const fb_games_url =
+var fb_games_url =
   'http://tilastopalvelu.fi/fb/modules/mod_schedule/helper/games.php?statgroupid=';
 var fb_games_stats =
   'http://tilastopalvelu.fi/fb/modules/mod_schedule/helper/game.php?gameid=';
@@ -28,6 +27,7 @@ var getLevels = async function (season) {
     2018: 8,
     2019: 9,
     2020: 10,
+    2021: 11,
   };
   let levels = [];
 
@@ -183,6 +183,11 @@ async function getTeamGames(params) {
         }
       } // group of groups
     }
+    console.log(
+      'Writing %s games for team %s',
+      currentTeam_games.length,
+      currentTeam
+    );
 
     fs.writeFileSync(
       `${basepath}${_season}-${currentTeam}_games.json`,
@@ -195,8 +200,6 @@ async function getTeamGames(params) {
       fs.readFileSync(`${basepath}${_season}-${currentTeam}_games.json`)
     );
   }
-
-  console.log('Found %s %s games ', currentTeam_games.length, currentTeam);
 }
 
 const yargs = require('yargs');
