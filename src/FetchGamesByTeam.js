@@ -17,22 +17,25 @@ var fb_games_stats =
 var basepath = './data/';
 let currentTeam_games = [];
 
+let seasons = {
+  2013: 3,
+  2014: 4,
+  2015: 5,
+  2016: 6,
+  2017: 7,
+  2018: 8,
+  2019: 9,
+  2020: 10,
+  2021: 11,
+};
+
 var getLevels = async function (season) {
-  let seasons = {
-    2013: 3,
-    2014: 4,
-    2015: 5,
-    2016: 6,
-    2017: 7,
-    2018: 8,
-    2019: 9,
-    2020: 10,
-    2021: 11,
-  };
+
+
   let levels = [];
 
   let url = 'http://tilastopalvelu.fi/fb/';
-  if (season !== 'current') {
+  if (seasons[season]) {
     url = `http://tilastopalvelu.fi/fb/index.php/component/content/article?id=12&ssnid=${seasons[season]}`;
   }
   console.log(url);
@@ -53,7 +56,7 @@ var getGroups = async function (param) {
   let groups = '';
 
   let url = `${fb_groups_url}${param.level}&area=`;
-  if (param.season !== 'current') {
+  if (seasons[param.season]) {
     fb_groups_url = fb_groups_url.replace(
       '/mod_statistics/',
       '/mod_statisticshistory/'
@@ -70,11 +73,10 @@ var getGroups = async function (param) {
 
 var getGames = async function (param) {
   // groupID, season, level, teamid, rinkid) {
-  let url = `${fb_games_url}${
-    param.groupID
-  }&select=&id=&teamid=&rinkid=&rdm=${Math.random()}`;
+  let url = `${fb_games_url}${param.groupID
+    }&select=&id=&teamid=&rinkid=&rdm=${Math.random()}`;
 
-  if (param.season !== 'current') {
+  if (seasons[param.season]) {
     fb_games_url = fb_games_url.replace(
       '/mod_schedule/',
       '/mod_schedulehistory/'
@@ -127,6 +129,10 @@ async function getTeamGames(params) {
     params.update = params.update == true ? true : false;
 
   var _season = !params.season ? 'current' : params.season;
+  if (_season == 'current') {
+    _season = (DateTime.now().month > 7) ? DateTime.now().year + 1 : DateTime.now().year - 1;
+    console.log("Adjusting current season %s", _season);
+  }
   console.log('Params: update=%s, season=%s', params.update, _season);
 
   if (
