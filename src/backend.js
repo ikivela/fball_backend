@@ -21,7 +21,7 @@ const app = express();
 const port = process.env.PORT || '3000';
 var cors = require('cors');
 const axios = require('axios');
-
+const seasons = require('../data/config/seasons.json');
 var datapath = path.join(path.resolve(__dirname), '../data/');
 
 /*
@@ -42,7 +42,7 @@ app.get('/seasons/', async (req, res) => {
   if (files.length > 0) {
     files = files.filter((file) => file.includes(currentTeam));
     files = files.map((file) => {
-      return file.split('-')[0];
+      return parseInt(file.split('-')[0]);
     });
     files = files.sort((a, b) => (a > b ? -1 : 1));
     res.status(200).json({ message: 'ok', data: files });
@@ -78,7 +78,7 @@ app.get('/seasonstats/', async (req, res) => {
   }
 });
 app.get('/gamestats/', async (req, res) => {
-  console.time('getGameStats-' + req.query.gameid);
+  console.time('getGameStats-' + req.query.gameid, req.query.season);
   var data = await getGameStats(req.query.gameid, req.query.season);
 
   if (data && data.length > 0) {
@@ -165,7 +165,8 @@ function parseEvents(response, gameid, year) {
 var getGameStats = async function (gameID, season) {
   let game_url = `http://tilastopalvelu.fi/fb/modules/mod_gamereport/helper/actions.php?gameid=${gameID}&rnd=${Math.random()}`;
 
-  if (season !== 'current') {
+  if (seasons[season.toString()]) {
+    console.log("archived season");
     game_url = game_url.replace('/mod_gamereport/', '/mod_gamereporthistory/');
     game_url = `${game_url}&season=${season}`;
   }
