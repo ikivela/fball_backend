@@ -19,8 +19,6 @@ var fb_games_stats =
 
 var basepath = './data/';
 
-var files = fs.readdirSync( basepath );
-files = files.filter( file => file.includes('Nibacos_games'));
 
 function parseEvents(response, gameid, year) {
   var actions = response.split('\n');
@@ -81,20 +79,20 @@ async function fetchStats( _file ) {
   games = JSON.parse(fs.readFileSync( basepath + _file ), 'utf8');
   
   games = games.filter( game => { 
-    return game.GameDate < DateTime.now().toFormat('yyyy-MM-dd') ? true : false; 
+    return game.GameDate == DateTime.now().toFormat('yyyy-MM-dd') ? true : false; 
   });
+
+  if (games.length == 0) console.log("No games played today.");
 
   for ( const[index, game] of games.entries() ) {
     await getGameStats( index, games.length, game.UniqueID, season);
   }	 
 }
 
-async function fetchSeasons() {
-  //for ( let file of files ) {
-  let file = '2023-Nibacos_games.json';
-   await fetchStats( file );
-  //}
+async function fetchTodaysResults(team, season) {
+  let file = `${season}-${team}_games.json`;
+  await fetchStats( file );
 }
 
-fetchSeasons();
+fetchTodaysResults('Nibacos', 2023);
 

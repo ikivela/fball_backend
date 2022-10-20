@@ -63,7 +63,11 @@ var getGameStats = async function (gameID, season) {
   var path =
     basepath + 'gamestats/' + season + '-gamestats-' + gameID + '.json';
   let stats = '';
-  stats = JSON.parse(fs.readFileSync(path));
+  if (fs.existsSync(path)) 
+    stats = JSON.parse(fs.readFileSync(path));
+  else 
+    stats = [];
+
   return stats;
 };
 
@@ -85,13 +89,13 @@ async function getStats(_season, club, class_name) {
     for (let game of games) {
       let records = await getGameStats(game.UniqueID, _season);
       records = records.filter((x) => x.team.includes(club));
-      console.log(
+      /*      console.log(
         _season,
         class_name,
         games.length,
         'tilastoja',
         records.length
-      );
+      );*/
       for (let record of records) {
         await addStat(record, game.UniqueID);
       }
