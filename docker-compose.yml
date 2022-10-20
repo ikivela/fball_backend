@@ -1,0 +1,19 @@
+version: '3'
+
+services:
+ backend:
+  build :
+    context: .
+  image: fball_backend:latest
+  environment:
+   - PORT=3000
+  ports:
+   - "8882:3000"
+  volumes:
+  - "/home/ikivela/dev/fball_backend/data/:/app/data/"
+ frontend:
+  build: 
+    context: ../fball_ui
+  image: fball_ui:latest
+  ports:
+   - "8881:80"

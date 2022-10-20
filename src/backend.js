@@ -79,25 +79,35 @@ app.get('/seasonstats/', async (req, res) => {
 });
 app.get('/gamestats/', async (req, res) => {
   console.time('getGameStats-' + req.query.gameid, req.query.season);
-  var data = await getGameStats(req.query.gameid, req.query.season);
+  let filepath = `${datapath}/gamestats/${req.query.season}-gamestats-${req.query.gameid}.json`;
 
-  if (data && data.length > 0) {
-    var events = parseEvents(data, req.query.gameid, req.query.season);
-    console.log(
-      'game stats',
-      req.query.gameid,
-      req.query.season,
-      events.length
-    );
-    console.timeEnd('getGameStats-' + req.query.gameid);
-    res.status(200).json(events);
+  // If data already fetched
+  if ( fs.existsSync(filepath)) {
+    return res.status(200).sendFile(filepath);
   } else {
-    res.status(404).end();
-  }
+    var data = await getGameStats(req.query.gameid, req.query.season);
+
+    if (data && data.length > 0) {
+      // Write gamestats to file
+      var events = parseEvents(data, req.query.gameid, req.query.season);
+      console.log(
+        'game stats',
+        req.query.gameid,
+        req.query.season,
+        events.length
+      );
+      console.timeEnd('getGameStats-' + req.query.gameid);
+      fs.writeFileSync( `${datapath}/gamestats/${req.query.season}-gamestats-${req.query.gameid}.json`, JSON.stringify(events), 'utf8');
+      res.status(200).json(events);
+    } else {
+      res.status(404).end();
+    }
+ }
 });
 
 app.get('/games/', async (req, res) => {
-  let year = req.query.year ? req.query.year : 'current';
+  if (!req.query.year) return res.status(403).json({ error_message: "year parameter missing"});
+  let year = req.query.year;
   console.log('GET games for %s', year);
 
   try {
@@ -164,7 +174,6 @@ function parseEvents(response, gameid, year) {
 
 var getGameStats = async function (gameID, season) {
   let game_url = `http://tilastopalvelu.fi/fb/modules/mod_gamereport/helper/actions.php?gameid=${gameID}&rnd=${Math.random()}`;
-
   if (seasons[season.toString()]) {
     console.log("archived season");
     game_url = game_url.replace('/mod_gamereport/', '/mod_gamereporthistory/');
