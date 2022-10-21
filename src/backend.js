@@ -18,7 +18,7 @@ require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss.l');
 
 const currentTeam = 'Nibacos';
 const app = express();
-const port = process.env.PORT || '3000';
+const port = 3000;
 var cors = require('cors');
 const axios = require('axios');
 const seasons = require('../data/config/seasons.json');

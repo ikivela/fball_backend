@@ -9,6 +9,7 @@ var findPlayer = async function (_name) {
   return players.findIndex((x) => x.name == _name);
 };
 
+
 async function addGoal(_playerid, _event) {
   if (_playerid > -1) {
     players[_playerid].goals++;
@@ -131,17 +132,24 @@ async function runScript() {
     .filter((file) => file.includes('Nibacos_games'));
 
   for (let seasonfile of seasons) {
+    let classes = [];
     let season = JSON.parse(fs.readFileSync(basepath + seasonfile));
-    let classes = season.map((season) => {
-      return season.class;
+    classes = season.map((season) => {
+      if ( season.class !== undefined) return season.class;
     });
-    classes = classes.filter(
-      (value, index, self) => self.indexOf(value) == index
-    );
 
+    classes = classes.filter(  (value, index, self) => {
+       //console.log(value, self.indexOf(value) === index || value == undefined);
+       if (value == undefined) 
+        return false;
+       else 
+         return self.indexOf(value) === index;
+    });
+
+    //console.log("filt", classes);
     for (let _class of classes) {
-      _class = _class.replace(/\n/g, '');
       //console.log(_class, seasonfile);
+      _class = _class.replace(/\n/g, '');
       let _seasonstring = seasonfile.split('-')[0];
 
       await getStats(_seasonstring, 'Nibacos', _class);

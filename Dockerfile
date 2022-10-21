@@ -11,7 +11,7 @@ ADD . $APP_DIR
 # Install dependencies
 RUN npm install --production
 
-EXPOSE 80
+EXPOSE 3000
 
 # run application
 CMD [ "npx", "pm2-runtime", "ecosystem.config.js" ]
