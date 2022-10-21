@@ -2,6 +2,8 @@ var axios = require('axios');
 var fs = require('fs');
 var cheerio = require('cheerio');
 const { DateTime } = require('luxon');
+
+
 // add timestamps in front of log messages
 require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss.l');
 var fb_areas_url =
@@ -15,22 +17,10 @@ var fb_games_stats =
 //&select=&id=&teamid=&rinkid=&season=2020&rdm=0.4436202946460597';
 
 var basepath = './data/';
+var seasons = require('../data/config/seasons');
 let currentTeam_games = [];
 
-let seasons = {
-  2013: 3,
-  2014: 4,
-  2015: 5,
-  2016: 6,
-  2017: 7,
-  2018: 8,
-  2019: 9,
-  2020: 10,
-  2021: 11,
-};
-
 var getLevels = async function (season) {
-
 
   let levels = [];
 
@@ -179,6 +169,7 @@ async function getTeamGames(params) {
             for (let game of games) {
               currentTeam_games.push({
                 ...game,
+                groupID: group.StatGroupID,
                 group: group.Name,
                 class: level.name,
               });
@@ -233,6 +224,7 @@ const argv = yargs
   .alias('help', 'h').argv;
 
 if (!argv.team) {
+  console.log(argv);
   console.log('Use --team teamname to search your team');
   process.exit(-1);
 }
