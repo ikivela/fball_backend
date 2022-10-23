@@ -7,7 +7,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const Stats = require('./Stats');
+//const Stats = require('./Stats');
 
 /**
  * App Variables
@@ -83,6 +83,7 @@ app.get('/gamestats/', async (req, res) => {
 
   // If data already fetched
   if ( fs.existsSync(filepath)) {
+    console.timeEnd('getGameStats-' + req.query.gameid, req.query.season);
     return res.status(200).sendFile(filepath);
   } else {
     var data = await getGameStats(req.query.gameid, req.query.season);

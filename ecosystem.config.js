@@ -17,7 +17,7 @@ module.exports = {
     },
     {
       name: 'fball_fetch_games_job',
-      script: 'node src/FetchGamesByTeam.js --team Nibacos',
+      script: 'node src/FetchGamesByTeam.js --team Nibacos -u',
       instances: 1,
       exec_mode: 'fork',
       cron_restart: '0 3 * * *',
@@ -25,6 +25,15 @@ module.exports = {
       autorestart: false,
     },
     {
+      name: 'fball_todays_games',
+      script: 'node src/FetchTodaysResults.js',
+      instances: 1,
+      exec_mode: 'fork',
+      cron_restart: '30 21 * * *',
+      watch: false,
+      autorestart: false,
+    },
+     {
       name: 'fball_fetch_games_job',
       script: 'npm run updateStats',
       instances: 1,
