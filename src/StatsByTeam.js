@@ -109,8 +109,12 @@ async function getStats(_season, club, class_name) {
     players.sort((a, b) => {
       return a.total > b.total ? -1 : 1;
     });
+
     if (players.length === 0)
-      console.log('No stats for %s %s', _season, class_name);
+       return; 
+
+
+    console.log(_season, class_name, "players", players.length);
     fs.writeFileSync(
       basepath +
         'stats/' +
@@ -120,7 +124,7 @@ async function getStats(_season, club, class_name) {
         '-stats.json',
       JSON.stringify(players)
     );
-    return players;
+
   } else {
     console.log('No games for %s season %s', class_name, _season);
   }
@@ -148,9 +152,9 @@ async function runScript() {
 
     //console.log("filt", classes);
     for (let _class of classes) {
-      //console.log(_class, seasonfile);
       _class = _class.replace(/\n/g, '');
       let _seasonstring = seasonfile.split('-')[0];
+      //console.log(_class, _seasonstring, seasonfile);
 
       await getStats(_seasonstring, 'Nibacos', _class);
     }

@@ -120,7 +120,7 @@ async function getTeamGames(params) {
 
   var _season = !params.season ? 'current' : params.season;
   if (_season == 'current') {
-    _season = (DateTime.now().month > 7) ? DateTime.now().year + 1 : DateTime.now().year - 1;
+    _season = DateTime.now().year;
     console.log("Adjusting current season %s", _season);
   }
   console.log('Params: update=%s, season=%s', params.update, _season);
