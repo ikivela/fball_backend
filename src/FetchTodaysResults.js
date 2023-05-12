@@ -15,10 +15,11 @@ const fb_games_url =
   'http://tilastopalvelu.fi/fb/modules/mod_schedule/helper/games.php?statgroupid=';
 var fb_games_stats =
   'http://tilastopalvelu.fi/fb/modules/mod_schedule/helper/game.php?gameid=';
-//&select=&id=&teamid=&rinkid=&season=2020&rdm=0.4436202946460597';
+var fb_game_rosters = 
+				'http://tilastopalvelu.fi/fb/modules/mod_gamerosters/helper/gamerosters.php?game=';
 
 var basepath = './data/';
-
+var currentTeam = 'Nibacos';
 
 function parseEvents(response, gameid, year) {
   var actions = response.split('\n');
@@ -73,6 +74,15 @@ var getGameStats = async function (index, games_length, gameID, season) {
   await fs.writeFileSync( writepath, JSON.stringify(stats), { encoding: "utf8"});
 }
 
+var getGameRosters = async function(id, team, season) {
+  let url = fb_game_rosters + id + "&team=" + team;
+	console.log( "roster url", url);
+	let response = await axios.post(url);
+	await fs.writeFileSync( basepath + 'gamestats/' + season + '-gamerosters-' + id + '.json',
+								JSON.stringify(response.data), { encoding: "utf8"}); 
+
+}
+
 async function fetchStats( _file ) {
   console.log("Fetch games file:", _file );
   let season = _file.split('-')[0];
@@ -86,6 +96,9 @@ async function fetchStats( _file ) {
 
   for ( const[index, game] of games.entries() ) {
     await getGameStats( index, games.length, game.UniqueID, season);
+		
+	  let homeway = game.HomeTeam.includes(currentTeam) ? "home" : "away";
+		await getGameRosters( game.UniqueID, homeaway, season);		
   }	 
 }
 
@@ -93,6 +106,8 @@ async function fetchTodaysResults(team, season) {
   let file = `${season}-${team}_games.json`;
   await fetchStats( file );
 }
+
+//getGameRosters(22712, "away", 2023); 
 
 fetchTodaysResults('Nibacos', 2023);
 
