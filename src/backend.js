@@ -22,6 +22,7 @@ const port = 3000;
 var cors = require('cors');
 const axios = require('axios');
 const seasons = require('../data/config/seasons.json');
+const players = require('../data/players.json');
 var datapath = path.join(path.resolve(__dirname), '../data/');
 
 /*
@@ -34,6 +35,15 @@ app.use(cors());
  */
 app.get('/', (req, res) => {
   res.status(200).json({ message: 'fball_backend ok' });
+});
+
+app.get('/players', async (req, res) => {
+  if (players) {
+    console.log('GET players', Object.keys(players).length);
+    return res.status(200).json(players);
+  } else {
+    return res.status(404).json({ message: 'players not found' });
+  }
 });
 
 app.get('/seasons/', async (req, res) => {
@@ -82,7 +92,7 @@ app.get('/gamestats/', async (req, res) => {
   let filepath = `${datapath}/gamestats/${req.query.season}-gamestats-${req.query.gameid}.json`;
 
   // If data already fetched
-  if ( fs.existsSync(filepath)) {
+  if (fs.existsSync(filepath)) {
     return res.status(200).sendFile(filepath);
   } else {
     var data = await getGameStats(req.query.gameid, req.query.season);
@@ -97,16 +107,16 @@ app.get('/gamestats/', async (req, res) => {
         events.length
       );
       console.timeEnd('getGameStats-' + req.query.gameid);
-      fs.writeFileSync( `${datapath}/gamestats/${req.query.season}-gamestats-${req.query.gameid}.json`, JSON.stringify(events), 'utf8');
+      fs.writeFileSync(`${datapath}/gamestats/${req.query.season}-gamestats-${req.query.gameid}.json`, JSON.stringify(events), 'utf8');
       res.status(200).json(events);
     } else {
       res.status(404).end();
     }
- }
+  }
 });
 
 app.get('/games/', async (req, res) => {
-  if (!req.query.year) return res.status(403).json({ error_message: "year parameter missing"});
+  if (!req.query.year) return res.status(403).json({ error_message: "year parameter missing" });
   let year = req.query.year;
   console.log('GET games for %s', year);
 
