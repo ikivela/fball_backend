@@ -13,6 +13,7 @@
   "author": "Ilkka Kivelä",
   "license": "ISC",
   "dependencies": {
+    "apollo-server": "^3.13.0",
     "async": "^3.2.0",
     "axios": "^0.24.0",
     "cheerio": "^1.0.0-rc.10",
@@ -20,8 +21,10 @@
     "cors": "^2.8.5",
     "dotenv": "^16.0.1",
     "express": "^4.17.1",
+    "graphql-yoga": "^5.1.1",
     "jshint": "^2.13.1",
     "luxon": "^2.1.1",
+    "mysql2": "^3.6.5",
     "pm2": "^5.1.2",
     "prettier": "^2.1.2",
     "yargs": "^17.3.1"
