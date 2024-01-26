@@ -16,14 +16,24 @@ const path = require('path');
 require('dotenv').config();
 require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss.l');
 
+var base_url = 'https://salibandy.api.torneopal.com/taso/rest/';
+var token = process.env.token || "your_token";
+var tokens = process.env.tokens || "your_token2";
+var season = '2023-2024';
+var club_id = process.env.club_id || "your_club_id";
+
+
 const currentTeam = 'Nibacos';
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 var cors = require('cors');
 const axios = require('axios');
 const seasons = require('../data/config/seasons.json');
-const players = require('../data/players.json');
+//const players = require('../data/players.json');
 var datapath = path.join(path.resolve(__dirname), '../data/');
+var basepath = './data/';
+
+
 
 /*
  *  App Configuration
@@ -37,6 +47,77 @@ app.get('/', (req, res) => {
   res.status(200).json({ message: 'fball_backend ok' });
 });
 
+app.get('/files/', async (req, res) => {
+  
+  const fullUrl = `https://luna.chydenius.fi/nibacos/api/files/`;
+  const dirpath = `${datapath}/files/`;
+  
+  try {
+    const { filename } = req.query;
+    let files = await fs.readdirSync(dirpath);
+    files = files.filter( file => file.includes('.html'));
+    console.log('request filename', filename);
+    if (files.includes(filename)) {
+      // Serve the specified file
+      const filePath = path.join(dirpath, filename);
+      res.sendFile(filePath);
+    } else {
+      let tablerows = "";
+      for (let file of files) {
+          const filePath = path.join(dirpath, file);
+          const stats = await fs.statSync(filePath);
+          // Format the timestamp to a custom format
+          const formattedTimestamp = stats.mtime.toLocaleString('fi-FI', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          });
+
+          tablerows += `
+                <tr>
+                  <td><a href="${fullUrl}?filename=${file}">${file}</a></td>
+                  <td>${stats.size} bytes</td>
+                  <td>${formattedTimestamp}</td>
+                </tr>`;
+      }
+    
+
+      const html = `
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>Nibacos ottelut, sarjataulukot</title>
+              </head>
+              <body>
+                <h1>Sarjataulukot</h1>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>File Name</th>
+                      <th>Size</th>
+                      <th>Last Modified</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${tablerows}
+                  </tbody>
+                </table>
+              </body>
+            </html>
+          `;
+
+      res.send(html);
+    }
+  } catch (_error) {
+    console.error(_error);
+    //res.status(500).end('request failed');
+  }
+});
+
+/*
 app.get('/players', async (req, res) => {
   if (players) {
     console.log('GET players', Object.keys(players).length);
@@ -45,7 +126,7 @@ app.get('/players', async (req, res) => {
     return res.status(404).json({ message: 'players not found' });
   }
 });
-
+*/
 app.get('/seasons/', async (req, res) => {
   let files = await fs.readdirSync(datapath);
   console.log('files', files.length);
@@ -93,6 +174,10 @@ app.get('/gamestats/', async (req, res) => {
 
   // If data already fetched
   if (fs.existsSync(filepath)) {
+    console.log("file found", filepath);
+    let data = await fs.readFileSync(filepath).length;
+    console.log("file length", data);
+
     return res.status(200).sendFile(filepath);
   } else {
     var data = await getGameStats(req.query.gameid, req.query.season);
@@ -107,7 +192,11 @@ app.get('/gamestats/', async (req, res) => {
         events.length
       );
       console.timeEnd('getGameStats-' + req.query.gameid);
-      fs.writeFileSync(`${datapath}/gamestats/${req.query.season}-gamestats-${req.query.gameid}.json`, JSON.stringify(events), 'utf8');
+      fs.writeFileSync(
+        `${datapath}/gamestats/${req.query.season}-gamestats-${req.query.gameid}.json`,
+        JSON.stringify(events),
+        'utf8'
+      );
       res.status(200).json(events);
     } else {
       res.status(404).end();
@@ -116,14 +205,20 @@ app.get('/gamestats/', async (req, res) => {
 });
 
 app.get('/games/', async (req, res) => {
-  if (!req.query.year) return res.status(403).json({ error_message: "year parameter missing" });
+  if (!req.query.year)
+    return res.status(403).json({ error_message: 'year parameter missing' });
   let year = req.query.year;
   console.log('GET games for %s', year);
 
   try {
     let filepath = `${datapath}${year}-${currentTeam}_games.json`;
     if (fs.existsSync(filepath)) {
-      res.status(200).sendFile(filepath);
+      if (year > 2023) {
+        var games = await parseGames(filepath);
+        res.status(200).json( games );  
+      } else {
+        res.status(200).sendFile(filepath);
+      }
     } else {
       return res.status(404).json({ message: 'Not found' });
     }
@@ -183,13 +278,40 @@ function parseEvents(response, gameid, year) {
 }
 
 var getGameStats = async function (gameID, season) {
-  let game_url = `http://tilastopalvelu.fi/fb/modules/mod_gamereport/helper/actions.php?gameid=${gameID}&rnd=${Math.random()}`;
-  if (seasons[season.toString()]) {
-    console.log("archived season");
-    game_url = game_url.replace('/mod_gamereport/', '/mod_gamereporthistory/');
-    game_url = `${game_url}&season=${season}`;
+  let game_url = `${base_url}getMatch?match_id=${gameID}&api_key=${token}&club_id=${club_id}`;
+  console.log('game url', gameID, game_url);
+  try {
+    stats = await axios.post(game_url);
+    let writepath = basepath + 'gamestats/' + season + '-gamestats-' + gameID + ".json";
+    //  console.log(`writing: ${writepath} ${index}/${games_length}` );
+    await fs.writeFileSync(writepath, JSON.stringify(stats.data), { encoding: "utf8" });
+  } catch (e) {
+    console.error("getGameStat error", e.response.status, e.response.statusText);
   }
-  console.log('game url', game_url);
-  stats = await axios.post(game_url);
-  return stats.data;
-};
+}
+
+var parseGames = async function( filepath ) {
+
+  var games = await fs.readFileSync(filepath);
+  console.log("reading", filepath, "games length", games.length);
+  games = JSON.parse(games);
+
+  games = games.matches.map((match) => {
+		return {
+			GameDate: match.date,
+			GameTime: match.time,
+			UniqueID: match.match_id,
+			HomeTeamName: match.team_A_description_en,
+			AwayTeamName: match.team_B_description_en,
+			Result: `${match.fs_A}-${match.fs_B}`,
+			Game: `${match.team_A_description_en}-${match.team_B_description_en}`,
+			group: match.group_name,
+			groupID: match.category_abbrevation,
+			class: match.category_name,
+			RinkName: match.venue_name,
+		};
+	});
+
+  return games;
+
+}
