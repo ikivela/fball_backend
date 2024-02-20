@@ -169,7 +169,6 @@ app.get('/seasonstats/', async (req, res) => {
   }
 });
 app.get('/gamestats/', async (req, res) => {
-  console.time('getGameStats-' + req.query.gameid, req.query.season);
   let filepath = `${datapath}/gamestats/${req.query.season}-gamestats-${req.query.gameid}.json`;
 
   // If data already fetched
@@ -177,7 +176,6 @@ app.get('/gamestats/', async (req, res) => {
     console.log("file found", filepath);
     let data = await fs.readFileSync(filepath).length;
     console.log("file length", data);
-
     return res.status(200).sendFile(filepath);
   } else {
     var data = await getGameStats(req.query.gameid, req.query.season);
@@ -191,7 +189,6 @@ app.get('/gamestats/', async (req, res) => {
         req.query.season,
         events.length
       );
-      console.timeEnd('getGameStats-' + req.query.gameid);
       fs.writeFileSync(
         `${datapath}/gamestats/${req.query.season}-gamestats-${req.query.gameid}.json`,
         JSON.stringify(events),
