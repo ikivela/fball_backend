@@ -8,7 +8,7 @@ require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss');
 
 var base_url = 'https://salibandy.api.torneopal.com/taso/rest/';
 var token = process.env.token || "your_token";
-var season = '2023-2024';
+var season = '2024-2025';
 var club_id = process.env.club_id || "your_club_id";
 
 
@@ -22,7 +22,7 @@ var getGames = async function (param) {
 
 	try {
 
-		let response = await axios.get(`${base_url}/getMatches?club_id=${club_id}&start_date=2023-08-01&end_date=2024-05-01&api_key=${token}`);
+		let response = await axios.get(`${base_url}/getMatches?club_id=${club_id}&start_date=2024-08-01&end_date=2025-05-30&api_key=${token}`);
     games = response.data;
 	} catch (e) {
 		console.log(base_url);
@@ -50,7 +50,7 @@ async function doFetch() {
 			RinkName: match.venue_name,
 		};
 	});*/
- 	  await fs.writeFileSync(`${basepath}./2024-Nibacos_games.json`, JSON.stringify(games));
+ 	  await fs.writeFileSync(`${basepath}./2025-Nibacos_games.json`, JSON.stringify(games));
 }
 
 doFetch();

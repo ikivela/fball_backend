@@ -15,16 +15,23 @@ const path = require('path');
 
 require('dotenv').config();
 require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss.l');
+const bodyParser = require('body-parser');
 
 var base_url = 'https://salibandy.api.torneopal.com/taso/rest/';
-var token = process.env.token || "your_token";
-var tokens = process.env.tokens || "your_token2";
+var token = process.env.token || 'your_token';
+var tokens = process.env.tokens || 'your_token2';
 var season = '2023-2024';
-var club_id = process.env.club_id || "your_club_id";
-
+var club_id = process.env.club_id || 'your_club_id';
 
 const currentTeam = 'Nibacos';
 const app = express();
+app.set('view engine', 'ejs');
+app.use(bodyParser.json());
+app.use(
+  bodyParser.urlencoded({
+    extended: true,
+  })
+);
 const port = process.env.PORT || 3000;
 var cors = require('cors');
 const axios = require('axios');
@@ -32,8 +39,6 @@ const seasons = require('../data/config/seasons.json');
 //const players = require('../data/players.json');
 var datapath = path.join(path.resolve(__dirname), '../data/');
 var basepath = './data/';
-
-
 
 /*
  *  App Configuration
@@ -47,43 +52,75 @@ app.get('/', (req, res) => {
   res.status(200).json({ message: 'fball_backend ok' });
 });
 
+app.get('/pelikello/:id', async (req, res) => {
+
+  let team_A_name, team_B_name, team_A_crest, team_B_crest;
+  try {
+    if (!req.params['id']) return res.status(404).end('Ottelu id puuttuu');
+
+    let response = await axios.get(
+      `https://salibandy-api.torneopal.net/taso/rest/getMatch?match_id=${req.params['id']}&api_key=${token}`
+    );
+    if (response.data && response.data.match ) {
+      team_A_name = response.data.match.team_A_name;
+      team_B_name = response.data.match.team_B_name;
+      team_A_crest = response.data.match.club_A_crest;
+      team_B_crest = response.data.match.club_B_crest;
+    } else {
+      team_A_name = "team A";
+      team_B_name = "team B"
+      team_A_crest = "";
+      team_B_crest = "";
+    }
+
+    res.render('kello', {
+      team_A_name: team_A_name,
+      team_B_name: team_B_name,
+      team_A_crest: team_A_crest,
+      team_B_crest: team_B_crest,
+      ottelu_id: req.params['id'],
+    });
+  } catch (e) {
+    console.log(e);
+    res.status(500).end();
+  }
+});
+
 app.get('/files/', async (req, res) => {
-  
   const fullUrl = `https://luna.chydenius.fi/nibacos/api/files/`;
   const dirpath = `${datapath}/files/`;
-  
+
   try {
     const { filename } = req.query;
     let files = await fs.readdirSync(dirpath);
-    files = files.filter( file => file.includes('.html'));
+    files = files.filter((file) => file.includes('.html'));
     console.log('request filename', filename);
     if (files.includes(filename)) {
       // Serve the specified file
       const filePath = path.join(dirpath, filename);
       res.sendFile(filePath);
     } else {
-      let tablerows = "";
+      let tablerows = '';
       for (let file of files) {
-          const filePath = path.join(dirpath, file);
-          const stats = await fs.statSync(filePath);
-          // Format the timestamp to a custom format
-          const formattedTimestamp = stats.mtime.toLocaleString('fi-FI', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-          });
+        const filePath = path.join(dirpath, file);
+        const stats = await fs.statSync(filePath);
+        // Format the timestamp to a custom format
+        const formattedTimestamp = stats.mtime.toLocaleString('fi-FI', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        });
 
-          tablerows += `
+        tablerows += `
                 <tr>
                   <td><a href="${fullUrl}?filename=${file}">${file}</a></td>
                   <td>${stats.size} bytes</td>
                   <td>${formattedTimestamp}</td>
                 </tr>`;
       }
-    
 
       const html = `
             <!DOCTYPE html>
@@ -173,9 +210,9 @@ app.get('/gamestats/', async (req, res) => {
 
   // If data already fetched
   if (fs.existsSync(filepath)) {
-    console.log("file found", filepath);
+    console.log('file found', filepath);
     let data = await fs.readFileSync(filepath).length;
-    console.log("file length", data);
+    console.log('file length', data);
     return res.status(200).sendFile(filepath);
   } else {
     var data = await getGameStats(req.query.gameid, req.query.season);
@@ -212,7 +249,7 @@ app.get('/games/', async (req, res) => {
     if (fs.existsSync(filepath)) {
       if (year > 2023) {
         var games = await parseGames(filepath);
-        res.status(200).json( games );  
+        res.status(200).json(games);
       } else {
         res.status(200).sendFile(filepath);
       }
@@ -279,36 +316,41 @@ var getGameStats = async function (gameID, season) {
   console.log('game url', gameID, game_url);
   try {
     stats = await axios.post(game_url);
-    let writepath = basepath + 'gamestats/' + season + '-gamestats-' + gameID + ".json";
+    let writepath =
+      basepath + 'gamestats/' + season + '-gamestats-' + gameID + '.json';
     //  console.log(`writing: ${writepath} ${index}/${games_length}` );
-    await fs.writeFileSync(writepath, JSON.stringify(stats.data), { encoding: "utf8" });
+    await fs.writeFileSync(writepath, JSON.stringify(stats.data), {
+      encoding: 'utf8',
+    });
   } catch (e) {
-    console.error("getGameStat error", e.response.status, e.response.statusText);
+    console.error(
+      'getGameStat error',
+      e.response.status,
+      e.response.statusText
+    );
   }
-}
+};
 
-var parseGames = async function( filepath ) {
-
+var parseGames = async function (filepath) {
   var games = await fs.readFileSync(filepath);
-  console.log("reading", filepath, "games length", games.length);
+  console.log('reading', filepath, 'games length', games.length);
   games = JSON.parse(games);
 
   games = games.matches.map((match) => {
-		return {
-			GameDate: match.date,
-			GameTime: match.time,
-			UniqueID: match.match_id,
-			HomeTeamName: match.team_A_description_en,
-			AwayTeamName: match.team_B_description_en,
-			Result: `${match.fs_A}-${match.fs_B}`,
-			Game: `${match.team_A_description_en}-${match.team_B_description_en}`,
-			group: match.group_name,
-			groupID: match.category_abbrevation,
-			class: match.category_name,
-			RinkName: match.venue_name,
-		};
-	});
+    return {
+      GameDate: match.date,
+      GameTime: match.time,
+      UniqueID: match.match_id,
+      HomeTeamName: match.team_A_description_en,
+      AwayTeamName: match.team_B_description_en,
+      Result: `${match.fs_A}-${match.fs_B}`,
+      Game: `${match.team_A_description_en}-${match.team_B_description_en}`,
+      group: match.group_name,
+      groupID: match.category_abbrevation,
+      class: match.category_name,
+      RinkName: match.venue_name,
+    };
+  });
 
   return games;
-
-}
+};

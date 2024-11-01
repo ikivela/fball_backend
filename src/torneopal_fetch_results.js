@@ -14,7 +14,7 @@ require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss.l');
 var base_url = 'https://salibandy.api.torneopal.com/taso/rest/';
 var token = process.env.token || "your_token";
 var tokens = process.env.tokens || "your_token2";
-var season = '2023-2024';
+var season = '2024-2025';
 var club_id = process.env.club_id || "your_club_id";
 
 const seasons = require('../data/config/seasons');
@@ -61,5 +61,5 @@ async function fetchTodaysResults(params, team, season) {
   await fetchStats(params, file);
 }
 
-fetchTodaysResults(argv.from_date, 'Nibacos', 2024);
+fetchTodaysResults(argv.from_date, 'Nibacos', 2025);
 

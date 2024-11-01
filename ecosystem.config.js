@@ -13,7 +13,7 @@ module.exports = {
         COMMON_VARIABLE: 'true',
       },
       instances: 1,
-      watch: false,
+      watch: true,
       autorestart: true,
     },
     {
@@ -42,8 +42,8 @@ module.exports = {
       cron_restart: '45 21 * * *',
       watch: false,
       autorestart: false,
-    },
-     {
+    }
+ /*    {
       name: 'fball_updateStats_job',
       script: 'npm run updateStats',
       instances: 1,
@@ -51,6 +51,6 @@ module.exports = {
       cron_restart: '0 22 * * *',
       watch: false,
       autorestart: false,
-    },
+    },*/
   ],
 };
