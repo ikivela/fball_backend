@@ -8,6 +8,7 @@
     "getResults": "node src/FetchStatsOfGames.js",
     "updateStats": "node src/StatsByTeam.js",
     "backend": "node src/backend.js",
+    "graphql": "node src/backend_graphql.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Ilkka Kivelä",

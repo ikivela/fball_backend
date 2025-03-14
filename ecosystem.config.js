@@ -13,10 +13,22 @@ module.exports = {
         COMMON_VARIABLE: 'true',
       },
       instances: 1,
-      watch: true,
+      watch: false,
       autorestart: true,
     },
     {
+      name: 'fball_api_graphql',
+      script: 'npm run graphql',
+      env: {
+        PORT: 4000,
+        COMMON_VARIABLE: 'true',
+      },
+      instances: 1,
+      watch: false,
+      autorestart: true,
+    },
+    {
+
       name: 'fball_fetch_games_job',
       script: 'node src/torneopal_fetch_games.js',
       instances: 1,

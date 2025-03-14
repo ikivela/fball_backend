@@ -7,6 +7,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const { DateTime } = require('luxon');
 //const Stats = require('./Stats');
 
 /**
@@ -14,13 +15,31 @@ const path = require('path');
  */
 
 require('dotenv').config();
+
+const mysql = require('mysql2/promise');
+require('dotenv').config()
+// Create the conn pool. The pool-specific settings are the defaults
+const pool = mysql.createPool({
+  host: 'localhost',
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  waitForConnections: true,
+  connLimit: 10,
+  maxIdle: 10, // max idle conns, the default value is the same as `connLimit`
+  idleTimeout: 60000, // idle conns timeout, in milliseconds, the default value 60000
+  queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0
+});
+
 require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss.l');
 const bodyParser = require('body-parser');
 
 var base_url = 'https://salibandy.api.torneopal.com/taso/rest/';
 var token = process.env.token || 'your_token';
 var tokens = process.env.tokens || 'your_token2';
-var season = '2023-2024';
+var season = '2024-2025';
 var club_id = process.env.club_id || 'your_club_id';
 
 const currentTeam = 'Nibacos';
@@ -36,6 +55,7 @@ const port = process.env.PORT || 3000;
 var cors = require('cors');
 const axios = require('axios');
 const seasons = require('../data/config/seasons.json');
+const { pathToFileURL } = require('url');
 //const players = require('../data/players.json');
 var datapath = path.join(path.resolve(__dirname), '../data/');
 var basepath = './data/';
@@ -154,29 +174,52 @@ app.get('/files/', async (req, res) => {
   }
 });
 
-/*
-app.get('/players', async (req, res) => {
-  if (players) {
-    console.log('GET players', Object.keys(players).length);
-    return res.status(200).json(players);
-  } else {
-    return res.status(404).json({ message: 'players not found' });
+
+app.get('/roster/', async (req, res) => { 
+  const conn = await pool.getConnection();
+  const year = req.query.season;
+  const gameid = req.query.gameid;
+  let sql = `SELECT rosters FROM ${year}_games WHERE UniqueID = ?`;
+  if ( year > 2023 ) return res.status(200).json({ message: 'ok', data: [] });
+  try {
+    const [rows, fields] = await pool.query(sql, [gameid]);
+    let game = rows;
+    if (game.length == 0)
+      res.status(200).json({ message: 'ok', data: [] });
+    else  
+      res.status(200).json(game[0].rosters);
+  } catch (e) {
+    console.error(e);
+    res.status(500).end();
+  } finally {
+    if ( conn ) pool.releaseConnection(conn);
   }
 });
-*/
+
 app.get('/seasons/', async (req, res) => {
-  let files = await fs.readdirSync(datapath);
-  console.log('files', files.length);
-  if (files.length > 0) {
-    files = files.filter((file) => file.includes(currentTeam));
-    files = files.map((file) => {
-      return parseInt(file.split('-')[0]);
+  // Read how many tables are in the database, and return the list of seasons
+  const conn = await await pool.getConnection();
+  let sql = 'SHOW TABLES';
+  let tables = [];
+  try {
+    const [rows, fields] = await conn.query(sql);
+    tables = rows.map((row) => {
+      return row[Object.keys(row)[0]];
     });
-    files = files.sort((a, b) => (a > b ? -1 : 1));
-    res.status(200).json({ message: 'ok', data: files });
-  } else {
-    res.status(404).json({ message: 'not found', data: null });
+    tables = tables.filter((table) => table.includes('_games'));
+    tables = tables.map((table) => {
+      return table.split('_')[0];
+    });
+    tables = tables.sort((a, b) => (a > b ? -1 : 1));
+    pool.releaseConnection(conn);
+    res.status(200).json({ message: 'ok', data: tables});
+  } catch (e) {
+    console.error(e);
+    res.status(500).end();
+  } finally {
+    if ( conn ) pool.releaseConnection(conn);
   }
+  
 });
 
 app.get('/seasonstats/', async (req, res) => {
@@ -206,36 +249,30 @@ app.get('/seasonstats/', async (req, res) => {
   }
 });
 app.get('/gamestats/', async (req, res) => {
-  let filepath = `${datapath}/gamestats/${req.query.season}-gamestats-${req.query.gameid}.json`;
+  const year = req.query.season;
+  const gameid = req.query.gameid;
+  let sql = `SELECT matchdata FROM ${year}_games WHERE match_id = ?`;
+  if (year < 2024) sql = `SELECT * FROM ${year}_games WHERE UniqueID = ?`;
+  const conn = await pool.getConnection();
+  try {
+    const [rows, fields] = await conn.query(sql, [gameid]);
+    let game = rows;
+    let data = {};
+    console.log(game);
+    if ( game.length > 0 && year < 2024 )
+      data = game[0].events; 
+    else if (game.length > 0 && year >= 2024)
+      data = { match: {...game[0].matchdata}};
 
-  // If data already fetched
-  if (fs.existsSync(filepath)) {
-    console.log('file found', filepath);
-    let data = await fs.readFileSync(filepath).length;
-    console.log('file length', data);
-    return res.status(200).sendFile(filepath);
-  } else {
-    var data = await getGameStats(req.query.gameid, req.query.season);
-
-    if (data && data.length > 0) {
-      // Write gamestats to file
-      var events = parseEvents(data, req.query.gameid, req.query.season);
-      console.log(
-        'game stats',
-        req.query.gameid,
-        req.query.season,
-        events.length
-      );
-      fs.writeFileSync(
-        `${datapath}/gamestats/${req.query.season}-gamestats-${req.query.gameid}.json`,
-        JSON.stringify(events),
-        'utf8'
-      );
-      res.status(200).json(events);
-    } else {
-      res.status(404).end();
-    }
+    if (data) return res.status(200).json(data);
+    else return res.status(404).end();
+  } catch (e) {
+    console.error(e);
+    return res.status(500).end();
+  } finally {
+    if ( conn ) pool.releaseConnection(conn);
   }
+  
 });
 
 app.get('/games/', async (req, res) => {
@@ -243,19 +280,9 @@ app.get('/games/', async (req, res) => {
     return res.status(403).json({ error_message: 'year parameter missing' });
   let year = req.query.year;
   console.log('GET games for %s', year);
-
   try {
-    let filepath = `${datapath}${year}-${currentTeam}_games.json`;
-    if (fs.existsSync(filepath)) {
-      if (year > 2023) {
-        var games = await parseGames(filepath);
-        res.status(200).json(games);
-      } else {
-        res.status(200).sendFile(filepath);
-      }
-    } else {
-      return res.status(404).json({ message: 'Not found' });
-    }
+    var games = await getGames(year);
+    res.status(200).json(games);
   } catch (err) {
     console.log(err);
     res.status(400).json(err);
@@ -311,6 +338,7 @@ function parseEvents(response, gameid, year) {
   return events;
 }
 
+/*
 var getGameStats = async function (gameID, season) {
   let game_url = `${base_url}getMatch?match_id=${gameID}&api_key=${token}&club_id=${club_id}`;
   console.log('game url', gameID, game_url);
@@ -330,27 +358,48 @@ var getGameStats = async function (gameID, season) {
     );
   }
 };
-
-var parseGames = async function (filepath) {
-  var games = await fs.readFileSync(filepath);
-  console.log('reading', filepath, 'games length', games.length);
-  games = JSON.parse(games);
-
-  games = games.matches.map((match) => {
-    return {
-      GameDate: match.date,
-      GameTime: match.time,
-      UniqueID: match.match_id,
-      HomeTeamName: match.team_A_description_en,
-      AwayTeamName: match.team_B_description_en,
-      Result: `${match.fs_A}-${match.fs_B}`,
-      Game: `${match.team_A_description_en}-${match.team_B_description_en}`,
-      group: match.group_name,
-      groupID: match.category_abbrevation,
-      class: match.category_name,
-      RinkName: match.venue_name,
-    };
-  });
-
-  return games;
-};
+*/
+var getGames = async function (year) {
+  const conn = await pool.getConnection();
+  let games = [];
+  let tablename = `${year}_games`;
+  let sql = `SELECT * FROM ${tablename}`;
+  try {
+    const [rows, fields] = await conn.query(sql);
+    games = rows;
+    //console.log(games);
+    if (year > 2023) {
+      games = games.map((match) => {
+        return {
+          GameDate: match.matchdata.date,
+          GameTime: match.matchdata.time,
+          UniqueID: match.matchdata.match_id,
+          HomeTeamName: match.matchdata.team_A_description_en,
+          AwayTeamName: match.matchdata.team_B_description_en,
+          Result: `${match.matchdata.fs_A}-${match.matchdata.fs_B}`,
+          Game: `${match.matchdata.team_A_description_en}-${match.matchdata.team_B_description_en}`,
+          group: match.matchdata.group_name,
+          groupID: match.matchdata.category_abbrevation,
+          class: match.matchdata.category_name,
+          RinkName: match.matchdata.venue_name,
+        };
+      });
+    } else {
+      // map GameDate to yyyy-mm-dd format  
+      for (let i = 0; i < games.length; i++) {
+        const date = DateTime.fromJSDate(games[i].GameDate);
+        if (date.isValid) {
+          games[i].GameDate = date.toFormat('yyyy-MM-dd');
+        } else {
+          console.log(`Invalid DateTime for game ${i}: ${games[i].GameDate}`);
+        }
+      }
+    }
+    
+  } catch (e) {
+    console.error(e);
+  } finally {
+    if ( conn )  pool.releaseConnection(conn);
+    return games;
+  }
+}
