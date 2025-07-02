@@ -8,13 +8,13 @@ require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss');
 
 var base_url = 'https://salibandy.api.torneopal.com/taso/rest/';
 var token = process.env.token || 'your_token';
-var season = '2023-2024';
+var season = '2024-2025';
 var club_id = process.env.club_id || 'your_club_id';
 
 var basepath = './data/';
 var seasons = require('../data/config/seasons');
 var active_groups = require('../data/config/active_groups');
-var current_games = require('../data/2024-Nibacos_games.json');
+var current_games = require('../data/2025-Nibacos_games.json');
 let currentTeam_games = [];
 
 var getCategories = async function (path) {
@@ -47,7 +47,6 @@ var doHTMLtables = async function () {
     content = JSON.parse(content);
     var category_name = content.category.category_name;
     var season = content.category.season_id;
-    var htmlcontent = '';
     var htmltable = '';
 
     for (let group of content.category.groups) {
