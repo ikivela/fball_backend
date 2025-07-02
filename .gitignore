@@ -3,4 +3,6 @@ node_modules
 data
 stats
 .vscode
-tmp/*
+.env
+tmp/
+*.DS_Store
