@@ -3,4 +3,5 @@ data
 stats
 .vscode
 .env
-tmp/*
+tmp/
+*.DS_Store
