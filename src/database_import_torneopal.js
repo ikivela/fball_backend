@@ -1,7 +1,7 @@
 const fs = require('fs');
 const mysql = require('mysql2/promise');
 require('dotenv').config()
-let current_season = 2025;
+let current_season = 2026;
 // Create the connection pool. The pool-specific settings are the defaults
 const pool = mysql.createPool({
   host: 'localhost',
@@ -48,7 +48,8 @@ async function store() {
       
       processEmptyToNull(game);
       console.log("Inserting ", game.match_id);
-      await insertDataIntoGames(year, game);
+      await insertDataIntoGames(year, game[0]);
+      return;
     }
   }
 
@@ -121,4 +122,6 @@ async function initGameTable(_year) {
     matchdata JSON
     )
   `);
+:
+  connection.release();
 }

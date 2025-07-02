@@ -2,6 +2,8 @@ var axios = require('axios');
 var fs = require('fs');
 const { DateTime } = require('luxon');
 require('dotenv').config();
+const mysql = require('mysql2/promise');
+require('dotenv').config()
 
 // add timestamps in front of log messages
 require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss');
@@ -17,7 +19,23 @@ var active_groups = require('../data/config/active_groups');
 var current_games = require('../data/2025-Nibacos_games.json');
 let currentTeam_games = [];
 
+
+const pool = mysql.createPool({
+  host: 'localhost',
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  waitForConnections: true,
+  connectionLimit: 10,
+  maxIdle: 10, // max idle connections, the default value is the same as `connectionLimit`
+  idleTimeout: 60000, // idle connections timeout, in milliseconds, the default value 60000
+  queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0
+});
+  
 var getCategories = async function (path) {
+
   var categories = current_games.matches.map((x) => {
     return {
       name: x.category_name,
