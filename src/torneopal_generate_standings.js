@@ -9,9 +9,34 @@ require('dotenv').config()
 require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss');
 
 var base_url = 'https://salibandy.api.torneopal.com/taso/rest/';
-var token = process.env.token || 'your_token';
-var season = '2024-2025';
-var club_id = process.env.club_id || 'your_club_id';
+
+// Helper function to validate year/season (must be 4-digit year)
+function validateYear(year) {
+  return /^\d{4}$/.test(year) ? year : null;
+}
+
+// Validate and sanitize environment variables
+function getEnvVar(name, fallback = null, validator = null) {
+  let value = process.env[name];
+  if (validator && value && !validator(value)) {
+    console.error(`Invalid value for environment variable ${name}: ${value}`);
+    process.exit(1);
+  }
+  return value || fallback;
+}
+
+// Remove default secrets for production safety
+var token = getEnvVar('token', null);
+if (!token) {
+  console.error('API token is required. Set the token environment variable.');
+  process.exit(1);
+}
+var season = getEnvVar('season', '2024-2025');
+var club_id = getEnvVar('club_id', null);
+if (!club_id) {
+  console.error('Club ID is required. Set the club_id environment variable.');
+  process.exit(1);
+}
 
 var basepath = './data/';
 var seasons = require('../data/config/seasons');
@@ -21,8 +46,7 @@ let currentTeam_games = [];
 
 
 const pool = mysql.createPool({
-  host: 'localhost',
-  user: process.env.DB_USER,
+  host: process.env.DB_HOST,  user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   waitForConnections: true,

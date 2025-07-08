@@ -7,14 +7,38 @@ require('dotenv').config()
 require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss');
 
 var base_url = 'https://salibandy.api.torneopal.com/taso/rest/';
-var token = process.env.token || "your_token";
-var season = '2023-2024';
-var club_id = '368';
 
+// Helper function to validate year/season (must be 4-digit year)
+function validateYear(year) {
+  return /^\d{4}$/.test(year) ? year : null;
+}
+
+// Validate and sanitize environment variables
+function getEnvVar(name, fallback = null, validator = null) {
+  let value = process.env[name];
+  if (validator && value && !validator(value)) {
+    console.error(`Invalid value for environment variable ${name}: ${value}`);
+    process.exit(1);
+  }
+  return value || fallback;
+}
+
+// Remove default secrets for production safety
+var token = getEnvVar('token', null);
+if (!token) {
+  console.error('API token is required. Set the token environment variable.');
+  process.exit(1);
+}
+var season = getEnvVar('season', '2023-2024');
+var club_id = getEnvVar('club_id', '368');
+if (!club_id) {
+  console.error('Club ID is required. Set the club_id environment variable.');
+  process.exit(1);
+}
 
 var basepath = './data/';
 
-// https://salibandy.api.torneopal.com/taso/rest/getGroup?competition_id=sb2023&category_id=875&group_id=1&matches=1
+// https://salibandy.api.torneopal.com/taso/rest/getGroup?competition_id=sb2023&category_id=875&group_id=1
 
 var getStandings = async function (cat_id) {
 
