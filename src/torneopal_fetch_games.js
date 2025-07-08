@@ -4,11 +4,10 @@ const { DateTime } = require('luxon');
 
 const mysql = require('mysql2/promise');
 require('dotenv').config()
-let current_season = process.env.year || DateTime.local().year;
+
 // Create the connection pool. The pool-specific settings are the defaults
 const pool = mysql.createPool({
-  host: 'localhost',
-  user: process.env.DB_USER,
+  host: process.env.DB_HOST,  user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   waitForConnections: true,
@@ -24,12 +23,6 @@ const pool = mysql.createPool({
 require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss');
 
 var base_url = 'https://salibandy.api.torneopal.com/taso/rest/';
-var token = process.env.token || "your_token";
-var season = process.env.season || '2025-2026';
-var start_date = process.env.start_date || '2025-08-01';
-var end_date = process.env.end_date || '2026-05-30';
-var club_id = process.env.club_id || "your_club_id";
-
 
 var basepath = './data/';
 var seasons = require('../data/config/seasons');
@@ -38,6 +31,37 @@ const { resolve } = require('path');
 const { connect } = require('http2');
 let currentTeam_games = [];
 
+// Helper function to validate year/season (must be 4-digit year)
+function validateYear(year) {
+  return /^\d{4}$/.test(year) ? year : null;
+}
+
+// Validate and sanitize environment variables
+function getEnvVar(name, fallback = null, validator = null) {
+  let value = process.env[name];
+  if (validator && value && !validator(value)) {
+    console.error(`Invalid value for environment variable ${name}: ${value}`);
+    process.exit(1);
+  }
+  return value || fallback;
+}
+
+let current_season = getEnvVar('year', DateTime.local().year.toString(), validateYear);
+
+// Remove default secrets for production safety
+var token = getEnvVar('token', null);
+if (!token) {
+  console.error('API token is required. Set the token environment variable.');
+  process.exit(1);
+}
+var season = getEnvVar('season', '2025-2026');
+var start_date = getEnvVar('start_date', '2025-08-01');
+var end_date = getEnvVar('end_date', '2026-05-30');
+var club_id = getEnvVar('club_id', null);
+if (!club_id) {
+  console.error('Club ID is required. Set the club_id environment variable.');
+  process.exit(1);
+}
 
 var getGames = async function (param) {
 
@@ -64,12 +88,15 @@ function processEmptyToNull(obj) {
 }
 // Function to initialize the "game" table in the database
 async function initGameTable(_year) {
-
   const tablename = `${_year}_games`;
+  // Validate table name
+  if (!validateYear(_year)) {
+    console.error(`Invalid year for table name: ${_year}`);
+    process.exit(1);
+  }
   const connection = await pool.getConnection();
-  
   await connection.query(`
-    CREATE TABLE IF NOT EXISTS ${tablename} (
+    CREATE TABLE IF NOT EXISTS \`${tablename}\` (
     match_id VARCHAR(10) PRIMARY KEY,
     category_id VARCHAR(10),
     category_name VARCHAR(50),
@@ -82,8 +109,11 @@ async function initGameTable(_year) {
 }
 // Function to insert data into the games table
 async function insertDataIntoGames(year, gameData) {
-  //console.log("gameData", gameData)
-   //const connection = await mysql.createConnection(connectionConfig);
+   // Validate year
+   if (!validateYear(year)) {
+     console.error(`Invalid year for table name: ${year}`);
+     process.exit(1);
+   }
    const columns = [
      'match_id',
      'category_id',
@@ -103,30 +133,28 @@ async function insertDataIntoGames(year, gameData) {
  
    const connection = await pool.getConnection();
    const tablename = `${year}_games`;
-
    await initGameTable(year); 
-
      try {
        await connection.execute(`
-         INSERT INTO ${tablename} (${columns})
+         INSERT INTO \`${tablename}\` (${columns})
          VALUES (${values.map(() => '?').join(', ')})
        `, values);
- 
        console.log(`Inserted game with match_id ${gameData.match_id}`);
      } catch (error) {
- 
        console.error(`Error inserting data for match_id ${gameData.match_id}:`, error);
        process.exit(-1);
- 
      }
- 
    connection.release();
  }
  
 
 
 async function insertIntoDatabase(year, games) {
-  // Create the connection pool. The pool-specific settings are the defaults
+  // Validate year
+  if (!validateYear(year)) {
+    console.error(`Invalid year for table name: ${year}`);
+    process.exit(1);
+  }
   const connection = await pool.getConnection();
   const tablename = `${year}_games`;
   await initGameTable(year); // Ensure the table is initialized
@@ -141,7 +169,7 @@ async function insertIntoDatabase(year, games) {
         console.log("Error: no match_id");
         continue;
       }
-      let [rows, fields] = await connection.execute(`SELECT * FROM ${tablename} WHERE match_id = ?`, [game.match_id]);
+      let [rows, fields] = await connection.execute(`SELECT * FROM \`${tablename}\` WHERE match_id = ?`, [game.match_id]);
       if (rows.length > 0) {
         //console.log(`Match ${game.match_id} already in database`);
         continue;
@@ -166,7 +194,11 @@ async function doFetch() {
 	try {
     var games = await getGames();
     await insertIntoDatabase(current_season, games.matches);
-    fs.writeFileSync(`${basepath}./${current_season}-Nibacos_games.json`, JSON.stringify(games));
+    try {
+      fs.writeFileSync(`${basepath}./${current_season}-Nibacos_games.json`, JSON.stringify(games));
+    } catch (fileErr) {
+      console.error('Error writing games file:', fileErr);
+    }
   } catch (e) {
     console.error(e);
   }

@@ -7,8 +7,7 @@ require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss');
 
 // Create the connection pool. The pool-specific settings are the defaults
 const pool = mysql.createPool({
-  host: 'localhost',
-  user: process.env.DB_USER,
+  host: process.env.DB_HOST,  user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   waitForConnections: true,
@@ -31,11 +30,40 @@ function processEmptyToNull(obj) {
   }
 }
 
+// Helper function to validate year/season (must be 4-digit year)
+function validateYear(year) {
+  return /^\d{4}$/.test(year) ? year : null;
+}
+
+// Validate and sanitize environment variables
+function getEnvVar(name, fallback = null, validator = null) {
+  let value = process.env[name];
+  if (validator && value && !validator(value)) {
+    console.error(`Invalid value for environment variable ${name}: ${value}`);
+    process.exit(1);
+  }
+  return value || fallback;
+}
+
+var token = getEnvVar('token', null);
+if (!token) {
+  console.error('API token is required. Set the token environment variable.');
+  process.exit(1);
+}
+var club_id = getEnvVar('club_id', null);
+if (!club_id) {
+  console.error('Club ID is required. Set the club_id environment variable.');
+  process.exit(1);
+}
 
 // Function to insert data into the games table
 var saveGame = async function (game, gameID, season) {
+  if (!validateYear(season)) {
+    console.error(`Invalid year for table name: ${season}`);
+    process.exit(1);
+  }
   try {
-    const tablename = `${season}_games`;
+    const tablename = `\`${season}_games\``;
     processEmptyToNull(game);
     const matchData = JSON.stringify(game);
     let sql = `UPDATE ${tablename} SET matchdata = ? WHERE match_id = ?`;

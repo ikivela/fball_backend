@@ -12,10 +12,10 @@ require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss.l');
 
 const mysql = require('mysql2/promise');
 require('dotenv').config()
-let current_season = process.env.year || DateTime.local().year;
-// Create the connection pool. The pool-specific settings are the defaults
+
+// Define the MySQL connection pool
 const pool = mysql.createPool({
-  host: 'localhost',
+  host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
@@ -28,13 +28,35 @@ const pool = mysql.createPool({
   keepAliveInitialDelay: 0
 });
 
+// Helper function to validate year/season (must be 4-digit year)
+function validateYear(year) {
+  return /^\d{4}$/.test(year) ? year : null;
+}
 
+// Validate and sanitize environment variables
+function getEnvVar(name, fallback = null, validator = null) {
+  let value = process.env[name];
+  if (validator && value && !validator(value)) {
+    console.error(`Invalid value for environment variable ${name}: ${value}`);
+    process.exit(1);
+  }
+  return value || fallback;
+}
 
-var base_url = 'https://salibandy.api.torneopal.com/taso/rest/';
-var token = process.env.token || "your_token";
-var tokens = process.env.tokens || "your_token2";
-var season = '2024-2025';
-var club_id = process.env.club_id || "your_club_id";
+let current_season = getEnvVar('year', DateTime.local().year.toString(), validateYear);
+
+// Remove default secrets for production safety
+var token = getEnvVar('token', null);
+if (!token) {
+  console.error('API token is required. Set the token environment variable.');
+  process.exit(1);
+}
+var season = getEnvVar('season', '2024-2025');
+var club_id = getEnvVar('club_id', null);
+if (!club_id) {
+  console.error('Club ID is required. Set the club_id environment variable.');
+  process.exit(1);
+}
 
 const seasons = require('../data/config/seasons');
 const { pathToFileURL } = require('url');
@@ -50,17 +72,19 @@ function processEmptyToNull(obj) {
 
 
 var saveGames = async function (game, season) {
+  if (!validateYear(season)) {
+    console.error(`Invalid year for table name: ${season}`);
+    process.exit(1);
+  }
   let game_url = `${base_url}getMatch?match_id=${game.match_id}&api_key=${token}&club_id=${club_id}`;
   try {
     stats = await axios.post(game_url);
     if (stats.data == 'Invalid key') throw new Error('Invalid key for game_url', game_url);
     // Save to Database
     const connection = pool.getConnection();
-    const tablename = `${season}_games`;
+    const tablename = `\`${season}_games\``;
     processEmptyToNull(stats.data.match);
-
     const matchData = JSON.stringify(stats.data.match);
-
     let sql = `UPDATE ${tablename} SET matchdata = ? WHERE match_id = ?`;
     let values = [matchData, game.match_id];
     const [rows, fields] = await pool.query(sql, values);
@@ -84,12 +108,20 @@ var getGameStats = async function (index, games_length, gameID, season) {
   }
 }
 
-async function fetchStatsDB(from_date, season) {
+async function fetchStatsDB(from_date) {
+  if (!from_date || !from_date.year) {
+    console.error('from_date is not a valid DateTime object');
+    process.exit(1);
+  }
+  if (!validateYear(from_date.year)) {
+    console.error(`Invalid year for table name: ${from_date.year}`);
+    process.exit(1);
+  }
   if ( !from_date ) from_date = DateTime.now().month > 7 ? DateTime.now().plus({years: 1}) : DateTime.now();
   else from_date = DateTime.fromISO(from_date);
 
   const connection = pool.getConnection();
-  const tablename = `${from_date.year}_games`;
+  const tablename = `\`${from_date.year}_games\``;
   let sql = `SELECT * FROM ${tablename} WHERE date = ?`;
   let games = [];
   try {
@@ -128,15 +160,24 @@ async function fetchStats(from_date, _file) {
   }
 }
 
-async function fetchTodaysResults(params) {
-  await fetchStatsDB(params);
-  //await fetchStats(params, file);
+async function fetchTodaysResults(from_date) {
+  // from_date can be undefined or a string
+  let dateObj;
+  if (!from_date) {
+    dateObj = DateTime.now().month > 7 ? DateTime.now().plus({years: 1}) : DateTime.now();
+  } else {
+    dateObj = DateTime.fromISO(from_date);
+    if (!dateObj.isValid) {
+      console.error('Invalid date format for from_date:', from_date);
+      process.exit(1);
+    }
+  }
+  await fetchStatsDB(dateObj);
 }
 
-fetchTodaysResults(argv.from_date, 'Nibacos', 2025).catch((error) => {
+fetchTodaysResults(argv.from_date).catch((error) => {
   console.error(error);
-}
-).then(() => {
+}).then(() => {
   process.exit(0);
 });
 
