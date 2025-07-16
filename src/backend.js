@@ -263,7 +263,7 @@ app.get('/gamestats/', async (req, res) => {
     const [rows, fields] = await conn.query(sql, [gameid]);
     let game = rows;
     let data = {};
-    console.log(game);
+    console.log("found gameid:", gameid );
     if ( game.length > 0 && year < 2024 )
       data = game[0].events; 
     else if (game.length > 0 && year >= 2024)
