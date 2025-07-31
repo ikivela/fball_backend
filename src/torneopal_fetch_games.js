@@ -100,6 +100,7 @@ async function initGameTable(_year) {
     match_id VARCHAR(10) PRIMARY KEY,
     category_id VARCHAR(10),
     category_name VARCHAR(50),
+    competition_name VARCHAR(50),
     date DATE,
     time TIME,
     matchdata JSON
@@ -118,6 +119,7 @@ async function insertDataIntoGames(year, gameData) {
      'match_id',
      'category_id',
      'category_name',
+     'competition_name',
      'date',
      'time',
      'matchdata'
@@ -126,24 +128,32 @@ async function insertDataIntoGames(year, gameData) {
      gameData.match_id,
      gameData.category_id,
      gameData.category_name,
+     gameData.competition_name,
      gameData.date,
      gameData.time,
      JSON.stringify(gameData)
    ];
- 
+
    const connection = await pool.getConnection();
    const tablename = `${year}_games`;
    await initGameTable(year); 
-     try {
-       await connection.execute(`
-         INSERT INTO \`${tablename}\` (${columns})
-         VALUES (${values.map(() => '?').join(', ')})
-       `, values);
-       console.log(`Inserted game with match_id ${gameData.match_id}`);
-     } catch (error) {
-       console.error(`Error inserting data for match_id ${gameData.match_id}:`, error);
-       process.exit(-1);
-     }
+   try {
+     await connection.execute(`
+       INSERT INTO \`${tablename}\` (${columns})
+       VALUES (${values.map(() => '?').join(', ')})
+       ON DUPLICATE KEY UPDATE
+         category_id = VALUES(category_id),
+         category_name = VALUES(category_name),
+         competition_name = VALUES(competition_name),
+         date = VALUES(date),
+         time = VALUES(time),
+         matchdata = VALUES(matchdata)
+     `, values);
+     console.log(`Inserted/Updated game with match_id ${gameData.match_id}`);
+   } catch (error) {
+     console.error(`Error inserting/updating data for match_id ${gameData.match_id}:`, error);
+     process.exit(-1);
+   }
    connection.release();
  }
  
@@ -169,16 +179,9 @@ async function insertIntoDatabase(year, games) {
         console.log("Error: no match_id");
         continue;
       }
-      let [rows, fields] = await connection.execute(`SELECT * FROM \`${tablename}\` WHERE match_id = ?`, [game.match_id]);
-      if (rows.length > 0) {
-        //console.log(`Match ${game.match_id} already in database`);
-        continue;
-      }
-      // pass each game to the insert function
-      console.log("Inserting ", game.match_id);
+      // pass each game to the insert function (no need to check for existing rows)
+      console.log("Inserting/Updating ", game.match_id);
       await insertDataIntoGames(year, game);
-      
-      
     }
   } catch (e) {
     console.error(e);
