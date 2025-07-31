@@ -110,52 +110,55 @@ async function initGameTable(_year) {
 }
 // Function to insert data into the games table
 async function insertDataIntoGames(year, gameData) {
-   // Validate year
-   if (!validateYear(year)) {
-     console.error(`Invalid year for table name: ${year}`);
-     process.exit(1);
-   }
-   const columns = [
-     'match_id',
-     'category_id',
-     'category_name',
-     'competition_name',
-     'date',
-     'time',
-     'matchdata'
-   ].join(', ');
-   const values = [
-     gameData.match_id,
-     gameData.category_id,
-     gameData.category_name,
-     gameData.competition_name,
-     gameData.date,
-     gameData.time,
-     JSON.stringify(gameData)
-   ];
+  if (!validateYear(year)) {
+    console.error(`Invalid year for table name: ${year}`);
+    process.exit(1);
+  }
+  const columns = [
+    'match_id',
+    'category_id',
+    'category_name',
+    'competition_name',
+    'date',
+    'time',
+    'matchdata'
+  ].join(', ');
+  const values = [
+    gameData.match_id,
+    gameData.category_id,
+    gameData.category_name,
+    gameData.competition_name,
+    gameData.date,
+    gameData.time,
+    JSON.stringify(gameData)
+  ];
 
-   const connection = await pool.getConnection();
-   const tablename = `${year}_games`;
-   await initGameTable(year); 
-   try {
-     await connection.execute(`
-       INSERT INTO \`${tablename}\` (${columns})
-       VALUES (${values.map(() => '?').join(', ')})
-       ON DUPLICATE KEY UPDATE
-         category_id = VALUES(category_id),
-         category_name = VALUES(category_name),
-         competition_name = VALUES(competition_name),
-         date = VALUES(date),
-         time = VALUES(time),
-         matchdata = VALUES(matchdata)
-     `, values);
-     console.log(`Inserted/Updated game with match_id ${gameData.match_id}`);
-   } catch (error) {
-     console.error(`Error inserting/updating data for match_id ${gameData.match_id}:`, error);
-     process.exit(-1);
-   }
-   connection.release();
- }
+  const connection = await pool.getConnection();
+  const tablename = `${year}_games`;
+  await initGameTable(year);
+
+  try {
+    // Tarkista löytyykö ottelu jo
+    const [rows] = await connection.execute(
+      `SELECT match_id FROM \`${tablename}\` WHERE match_id = ?`, [gameData.match_id]
+    );
+    if (rows.length === 0) {
+      // Ei löytynyt, lisää uusi
+      await connection.execute(
+        `INSERT INTO \`${tablename}\` (${columns}) VALUES (${values.map(() => '?').join(', ')})`,
+        values
+      );
+      console.log(`Inserted new game with match_id ${gameData.match_id}`);
+    } else {
+      // Ottelu löytyy jo, ei lisätä
+      //console.log(`Game with match_id ${gameData.match_id} already exists, skipping insert.`);
+    }
+  } catch (error) {
+    console.error(`Error inserting data for match_id ${gameData.match_id}:`, error);
+    process.exit(-1);
+  }
+  connection.release();
+}
  
 
 
@@ -168,7 +171,6 @@ async function insertIntoDatabase(year, games) {
   const connection = await pool.getConnection();
   const tablename = `${year}_games`;
   await initGameTable(year); // Ensure the table is initialized
-  console.log("Inserting into", tablename);
   console.log("Games length", games.length);  
 
   try {
@@ -180,7 +182,6 @@ async function insertIntoDatabase(year, games) {
         continue;
       }
       // pass each game to the insert function (no need to check for existing rows)
-      console.log("Inserting/Updating ", game.match_id);
       await insertDataIntoGames(year, game);
     }
   } catch (e) {
@@ -196,6 +197,8 @@ async function insertIntoDatabase(year, games) {
 async function doFetch() {
 	try {
     var games = await getGames();
+    current_season = games.season + 1 || current_season; // Use the season from the fetched data if available
+    console.log(`Current season: ${current_season}`);
     await insertIntoDatabase(current_season, games.matches);
     try {
       fs.writeFileSync(`${basepath}./${current_season}-Nibacos_games.json`, JSON.stringify(games));
