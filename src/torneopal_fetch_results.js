@@ -43,7 +43,7 @@ function getEnvVar(name, fallback = null, validator = null) {
   return value || fallback;
 }
 
-let current_season = getEnvVar('year', DateTime.local().year.toString(), validateYear);
+var base_url = 'https://salibandy.api.torneopal.com/taso/rest/';
 
 // Remove default secrets for production safety
 var token = getEnvVar('token', null);
@@ -51,14 +51,12 @@ if (!token) {
   console.error('API token is required. Set the token environment variable.');
   process.exit(1);
 }
-var season = getEnvVar('season', '2024-2025');
 var club_id = getEnvVar('club_id', null);
 if (!club_id) {
   console.error('Club ID is required. Set the club_id environment variable.');
   process.exit(1);
 }
 
-const seasons = require('../data/config/seasons');
 const { pathToFileURL } = require('url');
 var basepath = './data/';
 
@@ -109,19 +107,19 @@ var getGameStats = async function (index, games_length, gameID, season) {
 }
 
 async function fetchStatsDB(from_date) {
-  if (!from_date || !from_date.year) {
-    console.error('from_date is not a valid DateTime object');
-    process.exit(1);
-  }
-  if (!validateYear(from_date.year)) {
-    console.error(`Invalid year for table name: ${from_date.year}`);
-    process.exit(1);
-  }
-  if ( !from_date ) from_date = DateTime.now().month > 7 ? DateTime.now().plus({years: 1}) : DateTime.now();
-  else from_date = DateTime.fromISO(from_date);
 
+  // validate year from yyy-MM-DD format
+  if (!from_date || !DateTime.fromFormat(from_date, 'yyyy-MM-dd').isValid) {
+    console.error(`Invalid date format for from_date: ${from_date}. Expected format is yyyy-MM-dd.`);
+    process.exit(1);
+  }
+  console.log(from_date);
+  from_date = DateTime.fromFormat(from_date, 'yyyy-MM-dd');
+  const db_year = from_date.month > 6 ? from_date.plus({years: 1}).year : from_date.year;
+  console.log("Fetching games for date:", from_date.toFormat('yyyy-MM-dd'), "from db_year", db_year);
   const connection = pool.getConnection();
-  const tablename = `\`${from_date.year}_games\``;
+  const tablename = `\`${db_year}_games\``;
+  
   let sql = `SELECT * FROM ${tablename} WHERE date = ?`;
   let games = [];
   try {
@@ -162,17 +160,16 @@ async function fetchStats(from_date, _file) {
 
 async function fetchTodaysResults(from_date) {
   // from_date can be undefined or a string
-  let dateObj;
+  let date;
   if (!from_date) {
-    dateObj = DateTime.now().month > 7 ? DateTime.now().plus({years: 1}) : DateTime.now();
+    console.log("No from_date provided, using today's date");
+    date = DateTime.now().toFormat('yyyy-MM-dd');
+    console.log("Today:", date);
   } else {
-    dateObj = DateTime.fromISO(from_date);
-    if (!dateObj.isValid) {
-      console.error('Invalid date format for from_date:', from_date);
-      process.exit(1);
-    }
+    date = from_date;
+    console.log("From date:", date);
   }
-  await fetchStatsDB(dateObj);
+  await fetchStatsDB(date);
 }
 
 fetchTodaysResults(argv.from_date).catch((error) => {
