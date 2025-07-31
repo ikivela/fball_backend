@@ -394,6 +394,7 @@ var getGames = async function (year) {
           group: match.matchdata.group_name,
           groupID: match.matchdata.category_abbrevation,
           class: match.matchdata.category_name,
+          competition: match.matchdata.competition_name,
           RinkName: match.matchdata.venue_name,
         };
       });
