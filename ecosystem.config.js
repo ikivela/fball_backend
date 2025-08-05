@@ -7,7 +7,7 @@ module.exports = {
     // Main API Hosting
     {
       name: 'fball_api',
-      script: 'npm run backend',
+      script: 'node src/backend.js',
       env: {
         PORT: 8882,
         COMMON_VARIABLE: 'true',
@@ -18,7 +18,7 @@ module.exports = {
     },
     {
       name: 'fball_api_graphql',
-      script: 'npm run graphql',
+      script: 'node src/backend_graphql.js',
       env: {
         PORT: 4000,
         COMMON_VARIABLE: 'true',
