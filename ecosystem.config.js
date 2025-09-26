@@ -3,6 +3,7 @@ module.exports = {
    * Application configuration section
    * http://pm2.keymetrics.io/docs/usage/application-declaration/
    */
+  log_date_format: 'YYYY-MM-DD HH:mm:ss',
   apps: [
     // Main API Hosting
     {

@@ -58,6 +58,7 @@ if (!club_id) {
 }
 
 const { pathToFileURL } = require('url');
+const e = require('cors');
 var basepath = './data/';
 
 function processEmptyToNull(obj) {
@@ -79,14 +80,14 @@ var saveGames = async function (game, season) {
     stats = await axios.post(game_url);
     if (stats.data == 'Invalid key') throw new Error('Invalid key for game_url', game_url);
     // Save to Database
-    const connection = pool.getConnection();
     const tablename = `\`${season}_games\``;
     processEmptyToNull(stats.data.match);
     const matchData = JSON.stringify(stats.data.match);
-    let sql = `UPDATE ${tablename} SET matchdata = ? WHERE match_id = ?`;
-    let values = [matchData, game.match_id];
+    //const matchData = stats.data.match;
+    let sql = `UPDATE ${tablename} SET matchdata = CAST(? AS JSON) WHERE match_id = ?`;
+    let values = [matchData, game.match_id];    
     const [rows, fields] = await pool.query(sql, values);
-    console.log("Game", game.match_id, "saved to database");
+    if (rows.affectedRows > 0) console.log("Game", game.match_id, "saved to database");
   } catch (e) {
     console.error(e);
   }
@@ -115,11 +116,11 @@ async function fetchStatsDB(from_date) {
   }
   console.log(from_date);
   from_date = DateTime.fromFormat(from_date, 'yyyy-MM-dd');
-  const db_year = from_date.month > 6 ? from_date.plus({years: 1}).year : from_date.year;
+  const db_year = from_date.month > 6 ? from_date.plus({ years: 1 }).year : from_date.year;
   console.log("Fetching games for date:", from_date.toFormat('yyyy-MM-dd'), "from db_year", db_year);
   const connection = pool.getConnection();
   const tablename = `\`${db_year}_games\``;
-  
+
   let sql = `SELECT * FROM ${tablename} WHERE date = ?`;
   let games = [];
   try {
@@ -130,8 +131,8 @@ async function fetchStatsDB(from_date) {
     console.error(e);
   }
   pool.releaseConnection(connection);
-  for(const game of games) {
-    await saveGames(game, from_date.year);
+  for (const game of games) {
+    await saveGames(game, db_year);
   }
 
 }
@@ -142,13 +143,13 @@ async function fetchStats(from_date, _file) {
   let season = _file.split('-')[0];
   games = JSON.parse(fs.readFileSync(basepath + _file), 'utf8');
   if (from_date) {
-      games = games.matches.filter(game => {
-       return game.date >= from_date && game.date <= DateTime.now().toFormat('yyyy-MM-dd') ? true : false;
-      });
+    games = games.matches.filter(game => {
+      return game.date >= from_date && game.date <= DateTime.now().toFormat('yyyy-MM-dd') ? true : false;
+    });
   } else {
-      games = games.matches.filter(game => {
-       return game.date == DateTime.now().toFormat('yyyy-MM-dd') ? true : false;
-      });
+    games = games.matches.filter(game => {
+      return game.date == DateTime.now().toFormat('yyyy-MM-dd') ? true : false;
+    });
   }
 
   if (games.length == 0) console.log("No games found.");

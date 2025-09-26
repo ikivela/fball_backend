@@ -31,7 +31,7 @@ if (!token) {
   console.error('API token is required. Set the token environment variable.');
   process.exit(1);
 }
-var season = getEnvVar('season', '2024-2025');
+var season = getEnvVar('season', '2025-2026');
 var club_id = getEnvVar('club_id', null);
 if (!club_id) {
   console.error('Club ID is required. Set the club_id environment variable.');
@@ -39,14 +39,9 @@ if (!club_id) {
 }
 
 var basepath = './data/';
-var seasons = require('../data/config/seasons');
-var active_groups = require('../data/config/active_groups');
-var current_games = require('../data/2025-Nibacos_games.json');
-let currentTeam_games = [];
-
 
 const pool = mysql.createPool({
-  host: process.env.DB_HOST,  user: process.env.DB_USER,
+  host: process.env.DB_HOST, user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   waitForConnections: true,
@@ -57,33 +52,51 @@ const pool = mysql.createPool({
   enableKeepAlive: true,
   keepAliveInitialDelay: 0
 });
-  
-var getCategories = async function (path) {
 
-  var categories = current_games.matches.map((x) => {
-    return {
-      name: x.category_name,
-      competition_id: x.competition_id,
-      category_id: x.category_id,
-    };
-  });
+var getCategories = async function () {
+
+  // fetch games from database
+  var rows = [];
+  try {
+    var connection = await pool.getConnection();
+    // select unique categories from the 2026_games table
+    console.log('Fetching categories from database');
+    // Use a query to get unique categories
+    // Note: Adjust the table name and column names as per your database schema
+    [rows] = await connection.query(
+      'SELECT DISTINCT category_id, competition_id, competition_name FROM 2026_games'
+    );
+    // Close the connection
+    connection.release();
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    return [];
+  }
+  console.log('Fetching categories from database');
+  console.log(rows.length, 'categories found');
+  console.log(rows);
+
   // Use the filter method to create a new array with unique objects
   const uniqueObjectsSet = new Set();
-  const cats = categories.filter((obj) => {
-    const key = obj.name + obj.category_id;
+  const cats = rows.filter((obj) => {
+    const key = obj.category_id + obj.competition_name;
+    // Do not add empty categories
+    if (!obj.category_id || !obj.competition_name) {
+      return false;
+    }
     if (!uniqueObjectsSet.has(key)) {
       uniqueObjectsSet.add(key);
       return true;
     }
     return false;
   });
-  console.log(cats);
+  console.log('Unique categories:', cats.length);
   return cats;
 };
 
 var doHTMLtables = async function () {
   var files = fs.readdirSync(`${basepath}/standings/`);
-  files = files.filter( file => file.includes('json'));
+  files = files.filter(file => file.includes('json'));
   for (let file of files) {
     var content = await fs.readFileSync(`${basepath}/standings/${file}`);
     content = JSON.parse(content);
@@ -92,7 +105,7 @@ var doHTMLtables = async function () {
     var htmltable = '';
 
     for (let group of content.category.groups) {
-      console.log(group.competition_name, group.group_name);
+      //console.log(group.competition_name, group.group_name);
       var name = `<h4>${category_name} ${group.group_name}</h4>\n<table><tr>
       <th>Joukkue</th>
       <th>O</th>
@@ -155,11 +168,13 @@ var doHTMLtables = async function () {
       `${basepath}/files/${filename}.html`,
       htmlContent
     );
+    console.log(`HTML table for ${category_name} saved as ${filename}.html`);
   }
 };
 
 var getStandings = async function (category) {
   try {
+
     let url = `${base_url}/getCategory?competition_id=${category.competition_id}&category_id=${category.category_id}&api_key=${token}`;
     const response = await axios.get(url);
     if (response.data.call.status == 'error') {
@@ -167,22 +182,31 @@ var getStandings = async function (category) {
       console.error(response.data.call.error);
       return;
     }
-    console.log('saving category', category.name, category.category_id);
-    await fs.writeFileSync(
-      `${basepath}/standings/${season}_${category.name
-        .substr(0, 6)
-        .replace(' ', '_')}_${category.category_id}.json`,
-      JSON.stringify(response.data)
+    
+    // Save to Database
+    // get season last 4 digits after '-'
+    season = season.split('-').pop();
+    console.log('Saving standings for season:', season);
+    if (!validateYear(season)) {
+      console.error(`Invalid year for table name: ${season}`);
+      process.exit(1);
+    }
+
+    const connection = await pool.getConnection();
+    var category_name = response.data.category.category_name;
+    var category_id = response.data.category.category_id;
+    var competition_name = response.data.category.competition_name;
+    
+    await connection.query(
+      `INSERT INTO standings (season, category_id, category_name, competition_name, data)
+   VALUES (?, ?, ?, ?, ?)
+   ON DUPLICATE KEY UPDATE
+     category_name = VALUES(category_name),
+     data = VALUES(data)`,
+      [season, category_id, category_name, competition_name, JSON.stringify(response.data.category)]
     );
-    //console.log(response.data);
-    /*console.log(response.data.category);
-    if (!response.data.category.category_name) { 
-      var category_name = response.data.category.category_name.replace(' ', '_');
-      var season = response.data.category.season_id;
-      season = season.substr(season.length-4, season.length);
-      console.log(category_name, season);
-      await fs.writeFileSync(`${basepath}/standings/${season}_${category_name}.json`, JSON.stringify(response.data));
-    }*/
+    connection.release();
+
   } catch (e) {
     console.error(e);
   }
@@ -190,7 +214,12 @@ var getStandings = async function (category) {
 
 async function doFetch(update) {
   //	var games = await getGames();
+  console.log("Season:", season);
   const cats = await getCategories();
+  if (cats.length === 0) {
+    console.error('No categories found, exiting.');
+    process.exit(1);
+  }
   //await fs.writeFileSync(`${basepath}/standings/cats.json`, JSON.stringify(cats));
   if (update) {
     for (let cat of cats) {
@@ -198,6 +227,7 @@ async function doFetch(update) {
     }
   }
   doHTMLtables();
+  await pool.end();
   //fs.writeFileSync(`${basepath}./2024-Nibacos_games.json`, JSON.stringify(games));
 }
 
