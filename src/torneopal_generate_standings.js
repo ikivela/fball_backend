@@ -100,6 +100,10 @@ var doHTMLtables = async function () {
   for (let file of files) {
     var content = await fs.readFileSync(`${basepath}/standings/${file}`);
     content = JSON.parse(content);
+    if ( !content.category || !content.category.groups ) {
+      console.error(`Invalid content in file ${file}, skipping.`);
+      continue;
+    }
     var category_name = content.category.category_name;
     var season = content.category.season_id;
     var htmltable = '';
@@ -186,7 +190,6 @@ var getStandings = async function (category) {
     // Save to Database
     // get season last 4 digits after '-'
     season = season.split('-').pop();
-    console.log('Saving standings for season:', season);
     if (!validateYear(season)) {
       console.error(`Invalid year for table name: ${season}`);
       process.exit(1);
@@ -196,15 +199,18 @@ var getStandings = async function (category) {
     var category_name = response.data.category.category_name;
     var category_id = response.data.category.category_id;
     var competition_name = response.data.category.competition_name;
-    
+
+    console.log('Saving standings for season:', season, category_name, competition_name);
     await connection.query(
       `INSERT INTO standings (season, category_id, category_name, competition_name, data)
    VALUES (?, ?, ?, ?, ?)
    ON DUPLICATE KEY UPDATE
      category_name = VALUES(category_name),
      data = VALUES(data)`,
-      [season, category_id, category_name, competition_name, JSON.stringify(response.data.category)]
+      [season, category_id, category_name, competition_name, JSON.stringify({ groups : response.data.category.groups })]
     );
+    await fs.writeFileSync(`${basepath}/standings/${category_name.replace(' ', '_')}.json`, JSON.stringify(response.data));
+    //console.log(`Standings for ${category_name} saved to database and file.`);
     connection.release();
 
   } catch (e) {

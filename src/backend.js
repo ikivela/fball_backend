@@ -21,7 +21,7 @@ require('dotenv').config();
 
 // Create the conn pool. The pool-specific settings are the defaults
 const pool = mysql.createPool({
-  host: process.env.DB_HOST,  user: process.env.DB_USER,
+  host: process.env.DB_HOST, user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   waitForConnections: true,
@@ -87,7 +87,7 @@ app.get('/pelikello/:id', async (req, res) => {
     let response = await axios.get(
       `https://salibandy-api.torneopal.net/taso/rest/getMatch?match_id=${req.params['id']}&api_key=${token}`
     );
-    if (response.data && response.data.match ) {
+    if (response.data && response.data.match) {
       team_A_name = response.data.match.team_A_name;
       team_B_name = response.data.match.team_B_name;
       team_A_crest = response.data.match.club_A_crest;
@@ -179,7 +179,7 @@ app.get('/files/', async (req, res) => {
   }
 });
 
-app.get('/roster/', async (req, res) => { 
+app.get('/roster/', async (req, res) => {
   const conn = await pool.getConnection();
   const year = req.query.season;
   const gameid = req.query.gameid;
@@ -187,19 +187,19 @@ app.get('/roster/', async (req, res) => {
     return res.status(400).json({ error: 'Invalid year/season parameter' });
   }
   let sql = `SELECT rosters FROM \`${year}_games\` WHERE UniqueID = ?`;
-  if ( year > 2023 ) return res.status(200).json({ message: 'ok', data: [] });
+  if (year > 2023) return res.status(200).json({ message: 'ok', data: [] });
   try {
     const [rows, fields] = await pool.query(sql, [gameid]);
     let game = rows;
     if (game.length == 0)
       res.status(200).json({ message: 'ok', data: [] });
-    else  
+    else
       res.status(200).json(game[0].rosters);
   } catch (e) {
     console.error(e);
     res.status(500).end();
   } finally {
-    if ( conn ) pool.releaseConnection(conn);
+    if (conn) pool.releaseConnection(conn);
   }
 });
 
@@ -218,12 +218,12 @@ app.get('/seasons/', async (req, res) => {
       return table.split('_')[0];
     });
     tables = tables.sort((a, b) => (a > b ? -1 : 1));
-    res.status(200).json({ message: 'ok', data: tables});
+    res.status(200).json({ message: 'ok', data: tables });
   } catch (e) {
     console.error(e);
     res.status(500).end();
   } finally {
-    if ( conn ) pool.releaseConnection(conn);
+    if (conn) pool.releaseConnection(conn);
   }
 });
 
@@ -263,11 +263,11 @@ app.get('/gamestats/', async (req, res) => {
     const [rows, fields] = await conn.query(sql, [gameid]);
     let game = rows;
     let data = {};
-    console.log("found gameid:", gameid );
-    if ( game.length > 0 && year < 2024 )
-      data = game[0].events; 
+    console.log("found gameid:", gameid);
+    if (game.length > 0 && year < 2024)
+      data = game[0].events;
     else if (game.length > 0 && year >= 2024)
-      data = { match: {...game[0].matchdata}};
+      data = { match: { ...game[0].matchdata } };
 
     if (data) return res.status(200).json(data);
     else return res.status(404).end();
@@ -275,7 +275,7 @@ app.get('/gamestats/', async (req, res) => {
     console.error(e);
     return res.status(500).end();
   } finally {
-    if ( conn ) pool.releaseConnection(conn);
+    if (conn) pool.releaseConnection(conn);
   }
 });
 
@@ -320,7 +320,7 @@ app.listen(port, () => {
   );
 });
 
-var getPlayers = async function(birth_year) {
+var getPlayers = async function (birth_year) {
 
   if (birth_year)
     if (!validateYear(birth_year)) {
@@ -331,7 +331,7 @@ var getPlayers = async function(birth_year) {
   let gender = "";
   let tablename = `players`;
   let sql = `SELECT player_id, firstname, lastname, birth_year, player_data FROM ${tablename}`;
-  if ( birth_year) sql += ` WHERE birth_year = ${birth_year}`;
+  if (birth_year) sql += ` WHERE birth_year = ${birth_year}`;
   try {
     const [rows, fields] = await conn.query(sql);
     players = rows.map(row => {
@@ -365,7 +365,7 @@ var getPlayers = async function(birth_year) {
   } catch (e) {
     console.error(e);
   } finally {
-    if ( conn ) pool.releaseConnection(conn);
+    if (conn) pool.releaseConnection(conn);
     return players;
   }
 }
@@ -383,20 +383,25 @@ var getGames = async function (year) {
     games = rows;
     if (year > 2023) {
       games = games.map((match) => {
-        return {
-          GameDate: match.matchdata.date,
-          GameTime: match.matchdata.time,
-          UniqueID: match.matchdata.match_id,
-          HomeTeamName: match.matchdata.team_A_description_en,
-          AwayTeamName: match.matchdata.team_B_description_en,
-          Result: `${match.matchdata.fs_A}-${match.matchdata.fs_B}`,
-          Game: `${match.matchdata.team_A_description_en}-${match.matchdata.team_B_description_en}`,
-          group: match.matchdata.group_name,
-          groupID: match.matchdata.category_abbrevation,
-          class: match.matchdata.category_name,
-          competition: match.matchdata.competition_name,
-          RinkName: match.matchdata.venue_name,
-        };
+        if (match.matchdata == undefined) {
+          console.warn(`No match data found for game ${match.date}`);
+          return {};
+        } else {
+          return {
+            GameDate: match.matchdata.date,
+            GameTime: match.matchdata.time,
+            UniqueID: match.matchdata.match_id,
+            HomeTeamName: match.matchdata.team_A_description_en,
+            AwayTeamName: match.matchdata.team_B_description_en,
+            Result: `${match.matchdata.fs_A}-${match.matchdata.fs_B}`,
+            Game: `${match.matchdata.team_A_description_en}-${match.matchdata.team_B_description_en}`,
+            group: match.matchdata.group_name,
+            groupID: match.matchdata.category_abbrevation,
+            class: match.matchdata.category_name,
+            competition: match.matchdata.competition_name,
+            RinkName: match.matchdata.venue_name,
+          };
+        }
       });
     } else {
       // map GameDate to yyyy-mm-dd format  
@@ -409,11 +414,11 @@ var getGames = async function (year) {
         }
       }
     }
-    
+
   } catch (e) {
     console.error(e);
   } finally {
-    if ( conn )  pool.releaseConnection(conn);
+    if (conn) pool.releaseConnection(conn);
     return games;
   }
 }
