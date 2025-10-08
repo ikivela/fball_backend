@@ -29,7 +29,7 @@ if (!token) {
   console.error('API token is required. Set the token environment variable.');
   process.exit(1);
 }
-var season = getEnvVar('season', '2023-2024');
+var season = getEnvVar('season', '2025-2026');
 var club_id = getEnvVar('club_id', '368');
 if (!club_id) {
   console.error('Club ID is required. Set the club_id environment variable.');
