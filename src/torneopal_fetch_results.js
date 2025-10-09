@@ -1,17 +1,25 @@
 var axios = require('axios');
 var fs = require('fs');
-
-
 const yargs = require('yargs/yargs')
 const { hideBin } = require('yargs/helpers')
 const argv = yargs(hideBin(process.argv)).argv
 require('dotenv').config()
-
-const { DateTime } = require('luxon');
 require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss.l');
-
-const mysql = require('mysql2/promise');
 require('dotenv').config()
+const { updatePlayer } = require('./torneopal_update_players');
+const { DateTime } = require('luxon');
+const mysql = require('mysql2/promise');
+
+let globalNibacosPlayers = [];
+
+// print envs
+console.log("Using envs:", {
+  DB_HOST: process.env.DB_HOST,
+  DB_USER: process.env.DB_USER,
+  DB_NAME: process.env.DB_NAME,
+  club_id: process.env.club_id ? '***' : null,
+  token: process.env.token ? '***' : null
+});
 
 // Define the MySQL connection pool
 const pool = mysql.createPool({
@@ -19,6 +27,7 @@ const pool = mysql.createPool({
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
+  port: process.env.DB_PORT || 3306,
   waitForConnections: true,
   connectionLimit: 10,
   maxIdle: 10, // max idle connections, the default value is the same as `connectionLimit`
@@ -82,8 +91,37 @@ var saveGames = async function (game, season) {
     // Save to Database
     const tablename = `\`${season}_games\``;
     processEmptyToNull(stats.data.match);
+    const game = stats.data.match;
     const matchData = JSON.stringify(stats.data.match);
     //const matchData = stats.data.match;
+    // Determine 'Nibacos' teamid from team_A or team_B
+    let nibacos_teamid = null;
+    console.log(`Processing game ${game.match_id}: ${game.team_A_name} vs ${game.team_B_name}`);
+    if (game.team_A_name && game.team_A_name.toLowerCase().includes('nibacos')) {
+      nibacos_teamid = game.team_A_id;
+    } else if (game.team_B_name && game.team_B_name.toLowerCase().includes('nibacos')) {
+      nibacos_teamid = game.team_B_id;
+    }
+    if (nibacos_teamid) {
+      // filter nibacos players from lineup
+      if (game.lineups && Array.isArray(game.lineups)) {
+        let players = game.lineups.filter(player => player.team_id === nibacos_teamid);
+        // add players to global array, avoiding duplicates
+        globalNibacosPlayers = globalNibacosPlayers || [];
+        players.forEach(player => {
+          if (!globalNibacosPlayers.some(p => p.player_id === player.player_id)) {
+            globalNibacosPlayers.push(player);
+          }
+        });
+        console.log(`Found ${players.length} Nibacos players in game ${game.match_id}`);
+        
+      }
+    } else {
+      console.log(`Nibacos team not found in game ${game.match_id}`);
+    }
+      // Update nibacos_teamid in the database if not already set
+
+
     let sql = `UPDATE ${tablename} SET matchdata = CAST(? AS JSON) WHERE match_id = ?`;
     let values = [matchData, game.match_id];    
     const [rows, fields] = await pool.query(sql, values);
@@ -134,6 +172,17 @@ async function fetchStatsDB(from_date) {
   for (const game of games) {
     await saveGames(game, db_year);
   }
+  for (const player of globalNibacosPlayers) {
+    console.log(`Updating player ${player.player_name}`);
+    await updatePlayer(player.player_id);
+  }
+  if ( globalNibacosPlayers.length == 0 ) {
+    console.log("No Nibacos players found in today's games.");
+  } else {
+    console.log(`Total unique Nibacos players found: ${globalNibacosPlayers.length}`);
+  }
+  // Close the pool
+  await pool.end();
 
 }
 
