@@ -12,15 +12,6 @@ const mysql = require('mysql2/promise');
 
 let globalNibacosPlayers = [];
 
-// print envs
-console.log("Using envs:", {
-  DB_HOST: process.env.DB_HOST,
-  DB_USER: process.env.DB_USER,
-  DB_NAME: process.env.DB_NAME,
-  club_id: process.env.club_id ? '***' : null,
-  token: process.env.token ? '***' : null
-});
-
 // Define the MySQL connection pool
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -174,7 +165,7 @@ async function fetchStatsDB(from_date) {
   }
   for (const player of globalNibacosPlayers) {
     console.log(`Updating player ${player.player_name}`);
-    await updatePlayer(player.player_id);
+    await updatePlayer(player);
   }
   if ( globalNibacosPlayers.length == 0 ) {
     console.log("No Nibacos players found in today's games.");
