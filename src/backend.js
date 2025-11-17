@@ -64,6 +64,35 @@ app.use(
     extended: true,
   })
 );
+// Middleware apitokenin tarkistukseen
+async function requireApiToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Invalid or missing API token' });
+  }
+  const userToken = authHeader.replace('Bearer ', '');
+  try {
+    const conn = await pool.getConnection();
+    const [rows] = await conn.query('SELECT * FROM users WHERE token = ?', [userToken]);
+    if (conn) pool.releaseConnection(conn);
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid or missing API token' });
+    }
+    // Tarkista valid_login
+    const validLogin = rows[0].valid_login;
+    const now = new Date();
+    const validDate = new Date(validLogin);
+    // 6kk = 6*30*24*60*60*1000 ms
+    const sixMonthsMs = 6 * 30 * 24 * 60 * 60 * 1000;
+    if (now - validDate > sixMonthsMs) {
+      return res.status(401).json({ error: 'Token expired' });
+    }
+    next();
+  } catch (err) {
+    console.error('Token check failed:', err);
+    return res.status(500).json({ error: 'Token check failed' });
+  }
+}
 const port = process.env.PORT || 3000;
 const datapath = path.join(path.resolve(__dirname), '../data/');
 
@@ -71,15 +100,78 @@ const datapath = path.join(path.resolve(__dirname), '../data/');
  *  App Configuration
  */
 app.use(cors());
+// Käyttäjän rekisteröinti
+app.post('/register', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required' });
+  }
+  try {
+    const conn = await pool.getConnection();
+    // Tarkista onko käyttäjä jo olemassa
+    const [rows] = await conn.query('SELECT * FROM users WHERE username = ?', [username]);
+    if (rows.length > 0) {
+      if (conn) pool.releaseConnection(conn);
+      return res.status(409).json({ error: 'Username already exists' });
+    }
+    // Hashaa salasana
+    const hash = await bcrypt.hash(password, 10);
+    // Luo oletus-token
+    const defaultToken = 'default_token';
+    // Luo käyttäjä
+    await conn.query('INSERT INTO users (username, password, token, valid_login) VALUES (?, ?, ?, NOW())', [username, hash, defaultToken, Date.now()]);
+    if (conn) pool.releaseConnection(conn);
+    return res.status(201).json({ message: 'User registered', token: defaultToken });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Registration failed' });
+  }
+});
+const crypto = require('crypto');
+const bcrypt = require('bcrypt');
+// Kirjautumisreitti
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+  const salt = process.env.PASSWORD_SALT || 'default_salt';
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required' });
+  }
+  try {
+    const conn = await pool.getConnection();
+    // Hae käyttäjä users-taulusta
+    const [rows] = await conn.query('SELECT * FROM users WHERE username = ?', [username]);
+    if (rows.length === 0) {
+      if (conn) pool.releaseConnection(conn);
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+    const user = rows[0];
+    console.log("User found:", user.username);
+    // Tarkista salasana bcryptillä
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) {
+      if (conn) pool.releaseConnection(conn);
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+    // Generoi token
+    const token = crypto.createHash('sha256').update(username + password + salt + Date.now()).digest('hex');
+    // Tallenna token ja valid_login users-tauluun
+    await conn.query('UPDATE users SET token = ?, valid_login = NOW() WHERE username = ?', [token, username]);
+    if (conn) pool.releaseConnection(conn);
+    return res.status(200).json({ token });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Login failed' });
+  }
+});
 
 /**
  * Routes Definitions
  */
-app.get('/', (req, res) => {
+app.get('/', requireApiToken, (req, res) => {
   res.status(200).end('backend is running');
 });
 
-app.get('/pelikello/:id', async (req, res) => {
+app.get('/pelikello/:id', requireApiToken, async (req, res) => {
   let team_A_name, team_B_name, team_A_crest, team_B_crest;
   try {
     if (!req.params['id']) return res.status(404).end('Ottelu id puuttuu');
@@ -112,7 +204,7 @@ app.get('/pelikello/:id', async (req, res) => {
   }
 });
 
-app.get('/files/', async (req, res) => {
+app.get('/files/', requireApiToken, async (req, res) => {
   const fullUrl = `https://luna.chydenius.fi/nibacos/api/files/`;
   const dirpath = `${datapath}/files/`;
 
@@ -179,7 +271,7 @@ app.get('/files/', async (req, res) => {
   }
 });
 
-app.get('/roster/', async (req, res) => {
+app.get('/roster/', requireApiToken, async (req, res) => {
   const conn = await pool.getConnection();
   const year = req.query.season;
   const gameid = req.query.gameid;
@@ -203,7 +295,7 @@ app.get('/roster/', async (req, res) => {
   }
 });
 
-app.get('/seasons/', async (req, res) => {
+app.get('/seasons/', requireApiToken, async (req, res) => {
   // Read how many tables are in the database, and return the list of seasons
   const conn = await pool.getConnection();
   let sql = 'SHOW TABLES';
@@ -227,7 +319,7 @@ app.get('/seasons/', async (req, res) => {
   }
 });
 
-app.get('/seasonstats/', async (req, res) => {
+app.get('/seasonstats/', requireApiToken, async (req, res) => {
   try {
     let stat_files = await fs.readdirSync(datapath + 'stats');
     let stats = [];
@@ -253,7 +345,7 @@ app.get('/seasonstats/', async (req, res) => {
   }
 });
 
-app.get('/gamestats/', async (req, res) => {
+app.get('/gamestats/', requireApiToken, async (req, res) => {
   const year = req.query.season;
   const gameid = req.query.gameid;
   let sql = `SELECT matchdata FROM ${year}_games WHERE match_id = ?`;
@@ -279,7 +371,7 @@ app.get('/gamestats/', async (req, res) => {
   }
 });
 
-app.get('/players/', async (req, res) => {
+app.get('/players/', requireApiToken, async (req, res) => {
   if (req.query.birth_year && !validateYear(req.query.birth_year))
     return res.status(400).json('Invalid birth year');
   if (req.query.player_id) {
@@ -293,7 +385,7 @@ app.get('/players/', async (req, res) => {
   return res.status(200).json(await getPlayers(req.query.birth_year));
 });
 
-app.get('/games/', async (req, res) => {
+app.get('/games/', requireApiToken, async (req, res) => {
   if (!req.query.year)
     return res.status(403).json({ error_message: 'year parameter missing' });
   let year = req.query.year;
