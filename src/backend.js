@@ -12,6 +12,8 @@ const mysql = require('mysql2/promise');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const axios = require('axios');
+const crypto = require('crypto');
+const bcrypt = require('bcrypt');
 
 /**
  * App Variables
@@ -101,7 +103,7 @@ const datapath = path.join(path.resolve(__dirname), '../data/');
  */
 app.use(cors());
 // Käyttäjän rekisteröinti
-app.post('/register', async (req, res) => {
+app.post('/register', requireApiToken, async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required' });
@@ -127,8 +129,6 @@ app.post('/register', async (req, res) => {
     return res.status(500).json({ error: 'Registration failed' });
   }
 });
-const crypto = require('crypto');
-const bcrypt = require('bcrypt');
 // Kirjautumisreitti
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
