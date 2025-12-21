@@ -153,7 +153,14 @@ async function insertDataIntoGames(year, gameData) {
       );
       console.log(`Inserted new game with match_id ${gameData.match_id}`);
     } else {
-      // Ottelu löytyy jo, ei lisätä
+      // Ottelu löytyy jo, tarkista on päivä sama
+      if (rows[0].date !== gameData.date) {
+        await connection.execute(
+          `UPDATE \`${tablename}\` SET date = ?, time = ? WHERE match_id = ?`,
+          [gameData.date, gameData.time, gameData.match_id]
+        );
+        console.log(`Updated date for game with match_id ${gameData.match_id}`);
+      }
       //console.log(`Game with match_id ${gameData.match_id} already exists, skipping insert.`);
     }
   } catch (error) {
