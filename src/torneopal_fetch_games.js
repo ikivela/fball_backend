@@ -57,7 +57,7 @@ if (!token) {
 var season = getEnvVar('season', '2025-2026');
 var start_date = getEnvVar('start_date', '2025-08-01');
 var end_date = getEnvVar('end_date', '2026-05-30');
-var club_id = getEnvVar('club_id', null);
+var club_id = getEnvVar('your_club_id', null);
 if (!club_id) {
   console.error('Club ID is required. Set the club_id environment variable.');
   process.exit(1);
@@ -211,7 +211,7 @@ async function doFetch() {
     console.log(`Current season: ${current_season}`);
     await insertIntoDatabase(current_season, games.matches);
     try {
-      fs.writeFileSync(`${basepath}./${current_season}-Nibacos_games.json`, JSON.stringify(games));
+      fs.writeFileSync(`${basepath}./${current_season}-${process.env.your_team_name}_games.json`, JSON.stringify(games));
     } catch (fileErr) {
       console.error('Error writing games file:', fileErr);
     }

@@ -10,7 +10,7 @@ const { updatePlayer } = require('./torneopal_update_players');
 const { DateTime } = require('luxon');
 const mysql = require('mysql2/promise');
 
-let globalNibacosPlayers = [];
+let globalTeamPlayers = [];
 
 // Define the MySQL connection pool
 const pool = mysql.createPool({
@@ -85,32 +85,32 @@ var saveGames = async function (game, season) {
     const game = stats.data.match;
     const matchData = JSON.stringify(stats.data.match);
     //const matchData = stats.data.match;
-    // Determine 'Nibacos' teamid from team_A or team_B
-    let nibacos_teamid = null;
+    // Determine 'YourTeamName' teamid from team_A or team_B
+    let your_team_id = null;
     console.log(`Processing game ${game.match_id}: ${game.team_A_name} vs ${game.team_B_name}`);
-    if (game.team_A_name && game.team_A_name.toLowerCase().includes('nibacos')) {
-      nibacos_teamid = game.team_A_id;
-    } else if (game.team_B_name && game.team_B_name.toLowerCase().includes('nibacos')) {
-      nibacos_teamid = game.team_B_id;
+    if (game.team_A_name && game.team_A_name.toLowerCase().includes(process.env.your_team_name.toLowerCase())) {
+      your_team_id = game.team_A_id;
+    } else if (game.team_B_name && game.team_B_name.toLowerCase().includes(process.env.your_team_name.toLowerCase())) {
+      your_team_id = game.team_B_id;
     }
-    if (nibacos_teamid) {
-      // filter nibacos players from lineup
+    if (your_team_id) {
+      // filter your team players from lineup
       if (game.lineups && Array.isArray(game.lineups)) {
-        let players = game.lineups.filter(player => player.team_id === nibacos_teamid);
+        let players = game.lineups.filter(player => player.team_id === your_team_id);
         // add players to global array, avoiding duplicates
-        globalNibacosPlayers = globalNibacosPlayers || [];
+        globalTeamPlayers = globalTeamPlayers || [];
         players.forEach(player => {
-          if (!globalNibacosPlayers.some(p => p.player_id === player.player_id)) {
-            globalNibacosPlayers.push(player);
+          if (!globalTeamPlayers.some(p => p.player_id === player.player_id)) {
+            globalTeamPlayers.push(player);
           }
         });
-        console.log(`Found ${players.length} Nibacos players in game ${game.match_id}`);
+        console.log(`Found ${players.length} ${process.env.your_team_name} players in game ${game.match_id}`);
         
       }
     } else {
-      console.log(`Nibacos team not found in game ${game.match_id}`);
+      console.log(`${process.env.your_team_name} team not found in game ${game.match_id}`);
     }
-      // Update nibacos_teamid in the database if not already set
+      // Update your_team_id in the database if not already set
 
 
     let sql = `UPDATE ${tablename} SET matchdata = CAST(? AS JSON) WHERE match_id = ?`;
@@ -163,14 +163,14 @@ async function fetchStatsDB(from_date) {
   for (const game of games) {
     await saveGames(game, db_year);
   }
-  for (const player of globalNibacosPlayers) {
+  for (const player of globalTeamPlayers) {
     console.log(`Updating player ${player.player_name}`);
     await updatePlayer(player);
   }
-  if ( globalNibacosPlayers.length == 0 ) {
-    console.log("No Nibacos players found in today's games.");
+  if ( globalTeamPlayers.length == 0 ) {
+    console.log("No team players found in today's games.");
   } else {
-    console.log(`Total unique Nibacos players found: ${globalNibacosPlayers.length}`);
+    console.log(`Total unique ${process.env.your_team_name} players found: ${globalTeamPlayers.length}`);
   }
   // Close the pool
   await pool.end();
