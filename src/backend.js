@@ -204,8 +204,8 @@ app.get('/pelikello/:id', requireApiToken, async (req, res) => {
   }
 });
 
-app.get('/files/', requireApiToken, async (req, res) => {
-  const fullUrl = `https://luna.chydenius.fi/nibacos/api/files/`;
+app.get('/files/', async (req, res) => {
+  const fullUrl = `${process.env.backend_url}/api/files/`;
   const dirpath = `${datapath}/files/`;
 
   try {
@@ -244,7 +244,7 @@ app.get('/files/', requireApiToken, async (req, res) => {
             <!DOCTYPE html>
             <html>
               <head>
-                <title>Nibacos ottelut, sarjataulukot</title>
+                <title>${process.env.your_team_name} ottelut, sarjataulukot</title>
               </head>
               <body>
                 <h1>Sarjataulukot</h1>
