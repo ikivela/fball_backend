@@ -27,7 +27,6 @@ const pool = mysql.createPool({
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   waitForConnections: true,
-  connLimit: 10,
   maxIdle: 10, // max idle conns, the default value is the same as `connLimit`
   idleTimeout: 60000, // idle conns timeout, in milliseconds, the default value 60000
   queueLimit: 0,
@@ -168,44 +167,11 @@ app.post('/login', async (req, res) => {
  * Routes Definitions
  */
 app.get('/', requireApiToken, (req, res) => {
-  res.status(200).end('backend is running');
-});
-
-app.get('/pelikello/:id', requireApiToken, async (req, res) => {
-  let team_A_name, team_B_name, team_A_crest, team_B_crest;
-  try {
-    if (!req.params['id']) return res.status(404).end('Ottelu id puuttuu');
-
-    let response = await axios.get(
-      `https://salibandy-api.torneopal.net/taso/rest/getMatch?match_id=${req.params['id']}&api_key=${token}`
-    );
-    if (response.data && response.data.match) {
-      team_A_name = response.data.match.team_A_name;
-      team_B_name = response.data.match.team_B_name;
-      team_A_crest = response.data.match.club_A_crest;
-      team_B_crest = response.data.match.club_B_crest;
-    } else {
-      team_A_name = "team A";
-      team_B_name = "team B"
-      team_A_crest = "";
-      team_B_crest = "";
-    }
-
-    res.render('kello', {
-      team_A_name: team_A_name,
-      team_B_name: team_B_name,
-      team_A_crest: team_A_crest,
-      team_B_crest: team_B_crest,
-      ottelu_id: req.params['id'],
-    });
-  } catch (e) {
-    console.log(e);
-    res.status(500).end();
-  }
+  res.status(200).end('Floorball backend is running');
 });
 
 app.get('/files/', async (req, res) => {
-  const fullUrl = `${process.env.backend_url}/api/files/`;
+  const fullUrl = `${process.env.your_backend_url}/api/files/`;
   const dirpath = `${datapath}/files/`;
 
   try {
@@ -273,18 +239,24 @@ app.get('/files/', async (req, res) => {
 
 app.get('/roster/', requireApiToken, async (req, res) => {
   const conn = await pool.getConnection();
-  const year = req.query.season;
+  const year = req.query.season ? req.query.season : new Date().getFullYear();
   const gameid = req.query.gameid;
+
+  if (!gameid) {
+    return res.status(400).json({ error: 'Missing gameid parameter' });
+  }
   if (!validateYear(year)) {
     return res.status(400).json({ error: 'Invalid year/season parameter' });
   }
   let sql = `SELECT rosters FROM \`${year}_games\` WHERE UniqueID = ?`;
+  console.log('GET roster for gameid %s, season %s', gameid, year);
+
   if (year > 2023) return res.status(200).json({ message: 'ok', data: [] });
   try {
     const [rows, fields] = await pool.query(sql, [gameid]);
     let game = rows;
     if (game.length == 0)
-      res.status(200).json({ message: 'ok', data: [] });
+      res.status(200).json({ message: 'No roster found', data: [] });
     else
       res.status(200).json(game[0].rosters);
   } catch (e) {
@@ -321,6 +293,27 @@ app.get('/seasons/', requireApiToken, async (req, res) => {
 
 app.get('/seasonstats/', requireApiToken, async (req, res) => {
   try {
+    const conn = await pool.getConnection();
+    // Get all stats from database
+    let sql = `SELECT season, category, stats FROM stats`;
+    const [rows, fields] = await conn.query(sql);
+  
+    if (rows.length === 0) {
+      conn.release();
+      return res.status(200).json([]);
+    } else {
+      let stats = rows.map(row => {
+        return {
+          season: row.season,
+          class: row.category,
+          stats: row.stats
+        };
+      });
+      conn.release();
+      return res.status(200).json(stats);
+    }
+    /*
+
     let stat_files = await fs.readdirSync(datapath + 'stats');
     let stats = [];
     let data = '';
@@ -338,7 +331,7 @@ app.get('/seasonstats/', requireApiToken, async (req, res) => {
         stats.push({ season: classname[0], class: _class, stats: data });
       }
     }
-    res.status(200).json(stats);
+    res.status(200).json(stats);*/
   } catch (_err) {
     console.error(_err);
     res.status(500).end();
@@ -408,7 +401,7 @@ app.get('/games/', requireApiToken, async (req, res) => {
 
 app.listen(port, () => {
   console.log(
-    `fball_backend running, listening to requests on http://localhost:${port}`
+    `fball_backend running, listening to requests on ${process.env.your_backend_url}:${process.env.PORT}`
   );
 });
 
