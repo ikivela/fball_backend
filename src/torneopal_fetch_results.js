@@ -51,14 +51,12 @@ if (!token) {
   console.error('API token is required. Set the token environment variable.');
   process.exit(1);
 }
-var club_id = getEnvVar('club_id', null);
+var club_id = getEnvVar('your_club_id', null);
 if (!club_id) {
   console.error('Club ID is required. Set the club_id environment variable.');
   process.exit(1);
 }
 
-const { pathToFileURL } = require('url');
-const e = require('cors');
 var basepath = './data/';
 
 function processEmptyToNull(obj) {
@@ -68,7 +66,6 @@ function processEmptyToNull(obj) {
     }
   }
 }
-
 
 var saveGames = async function (game, season) {
   if (!validateYear(season)) {
@@ -122,20 +119,6 @@ var saveGames = async function (game, season) {
   }
 }
 
-var getGameStats = async function (index, games_length, gameID, season) {
-  let game_url = `${base_url}getMatch?match_id=${gameID}&api_key=${token}&club_id=${club_id}`;
-  //console.log('game url', gameID, game_url);
-  try {
-    stats = await axios.post(game_url);
-    if (stats.data == 'Invalid key') throw new Error('Invalid key for game_url', game_url);
-    let writepath = basepath + 'gamestats/' + season + '-gamestats-' + gameID + ".json";
-    await fs.writeFileSync(writepath, JSON.stringify(stats.data), { encoding: "utf8" });
-    console.log(`Game ${gameID} fetched and saved`);
-  } catch (e) {
-    console.error(e);
-  }
-}
-
 async function fetchStatsDB(from_date) {
 
   // validate year from yyy-MM-DD format
@@ -175,28 +158,6 @@ async function fetchStatsDB(from_date) {
   // Close the pool
   await pool.end();
 
-}
-
-async function fetchStats(from_date, _file) {
-  console.log("Fetch games file:", _file, "from_date", DateTime.fromISO(from_date).toFormat('yyyy-MM-dd'));
-  from_date = DateTime.fromISO(from_date).toFormat('yyyy-MM-dd');
-  let season = _file.split('-')[0];
-  games = JSON.parse(fs.readFileSync(basepath + _file), 'utf8');
-  if (from_date) {
-    games = games.matches.filter(game => {
-      return game.date >= from_date && game.date <= DateTime.now().toFormat('yyyy-MM-dd') ? true : false;
-    });
-  } else {
-    games = games.matches.filter(game => {
-      return game.date == DateTime.now().toFormat('yyyy-MM-dd') ? true : false;
-    });
-  }
-
-  if (games.length == 0) console.log("No games found.");
-  else console.log("Found %s games", games.length);
-  for (const [index, game] of games.entries()) {
-    await getGameStats(index, games.length, game.match_id, season);
-  }
 }
 
 async function fetchTodaysResults(from_date) {

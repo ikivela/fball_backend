@@ -25,11 +25,8 @@ require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss');
 var base_url = 'https://salibandy.api.torneopal.com/taso/rest/';
 
 var basepath = './data/';
-var seasons = require('../data/config/seasons');
-var active_groups = require('../data/config/active_groups');
 const { resolve } = require('path');
 const { connect } = require('http2');
-let currentTeam_games = [];
 
 // Helper function to validate year/season (must be 4-digit year)
 function validateYear(year) {
