@@ -176,6 +176,9 @@ app.get('/files/', async (req, res) => {
 
   try {
     const { filename } = req.query;
+		if ( !fs.existsSync(dirpath)) {
+			return res.status(404).json( { message: "files not found"});
+		}
     let files = await fs.readdirSync(dirpath);
     files = files.filter((file) => file.includes('.html'));
     console.log('request filename', filename);
