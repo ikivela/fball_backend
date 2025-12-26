@@ -207,11 +207,6 @@ async function doFetch() {
     current_season = games.season + 1 || current_season; // Use the season from the fetched data if available
     console.log(`Current season: ${current_season}`);
     await insertIntoDatabase(current_season, games.matches);
-    try {
-      fs.writeFileSync(`${basepath}./${current_season}-${process.env.your_team_name}_games.json`, JSON.stringify(games));
-    } catch (fileErr) {
-      console.error('Error writing games file:', fileErr);
-    }
   } catch (e) {
     console.error(e);
   }
