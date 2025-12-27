@@ -170,18 +170,49 @@ app.get('/', requireApiToken, (req, res) => {
   res.status(200).end('Floorball backend is running');
 });
 
-app.get('/files/', async (req, res) => {
-  const fullUrl = `${process.env.your_backend_url}/api/files/`;
-  const dirpath = `${datapath}/files/`;
+app.get('/standings/', async (req, res) => {
 
   try {
-    const { filename } = req.query;
-		if ( !fs.existsSync(dirpath)) {
-			return res.status(404).json( { message: "files not found"});
-		}
-    let files = await fs.readdirSync(dirpath);
-    files = files.filter((file) => file.includes('.html'));
-    console.log('request filename', filename);
+    const conn = await pool.getConnection();
+    let sql = `SELECT category_id, season, category_name, data FROM standings ORDER BY season DESC`;
+    const [rows, fields] = await conn.query(sql);
+    if (conn) pool.releaseConnection(conn);
+    let standings = rows.map(row => {
+      return {
+        category_id: row.category_id,
+        season: row.season,
+        category_name: row.category_name,
+        groups: row.data.groups.map(group => {
+          return {
+            group_name: group.group_name,
+            teams: group.teams.map(team => {
+              return {
+                team_id: team.team_id,
+                team_name: team.team_name,
+                matches_played: team.matches_played,
+                matches_won: team.matches_won,
+                matches_lost: team.matches_lost,
+                matches_tied: team.matches_tied,
+                goals_diff: team.goals_diff,
+                goals_for: team.goals_for,
+                goals_against: team.goals_against,
+                points: team.points,
+
+              }
+            })
+          }
+        })
+      }
+    });
+
+    res.status(200).json(standings);
+
+  } catch (e) {
+    console.error(e);
+    res.status(500).end();
+  }
+});
+/*
     if (files.includes(filename)) {
       // Serve the specified file
       const filePath = path.join(dirpath, filename);
@@ -239,6 +270,7 @@ app.get('/files/', async (req, res) => {
     console.error(_error);
   }
 });
+*/
 
 app.get('/roster/', requireApiToken, async (req, res) => {
   const conn = await pool.getConnection();
@@ -300,7 +332,7 @@ app.get('/seasonstats/', requireApiToken, async (req, res) => {
     // Get all stats from database
     let sql = `SELECT season, category, stats FROM stats`;
     const [rows, fields] = await conn.query(sql);
-  
+
     if (rows.length === 0) {
       conn.release();
       return res.status(200).json([]);
