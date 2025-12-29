@@ -170,7 +170,7 @@ app.get('/', requireApiToken, (req, res) => {
   res.status(200).end('Floorball backend is running');
 });
 
-app.get('/standings/', async (req, res) => {
+app.get('/standings/', requireApiToken, async (req, res) => {
 
   try {
     const conn = await pool.getConnection();
