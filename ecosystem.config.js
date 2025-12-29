@@ -17,18 +17,7 @@ module.exports = {
       watch: false,
       autorestart: true,
     },
-    {
-      name: 'fball_api_graphql',
-      script: 'node src/backend_graphql.js',
-      env: {
-        PORT: 4000,
-        COMMON_VARIABLE: 'true',
-      },
-      instances: 1,
-      watch: false,
-      autorestart: true,
-    },
-    {
+   {
 
       name: 'fball_fetch_games_job',
       script: 'node src/torneopal_fetch_games.js',
@@ -47,15 +36,6 @@ module.exports = {
       watch: false,
       autorestart: false,
     },
-    {
-      name: 'fball_generateStandings_job',
-      script: 'node src/torneopal_generate_standings.js',
-      instances: 1,
-      exec_mode: 'fork',
-      cron_restart: '45 21 * * *',
-      watch: false,
-      autorestart: false,
-    }
  /*    {
       name: 'fball_updateStats_job',
       script: 'npm run updateStats',
