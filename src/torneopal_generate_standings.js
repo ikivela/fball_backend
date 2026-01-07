@@ -149,6 +149,7 @@ async function fetchAndStoreStandings(category) {
       console.error(`Invalid year for table name: ${seasonYear}`);
       process.exit(1);
     }
+    console.log(`Storing standings for ${response.data.category.category_name} (${category.category_id})`);
     const connection = await pool.getConnection();
     const category_name = response.data.category.category_name;
     const category_id = response.data.category.category_id;
@@ -157,8 +158,8 @@ async function fetchAndStoreStandings(category) {
       `INSERT INTO standings (season, category_id, category_name, competition_name, data)
    VALUES (?, ?, ?, ?, ?)
    ON DUPLICATE KEY UPDATE
+     competition_name = VALUES(competition_name),
      category_name = VALUES(category_name),
-     season = VALUES(season),
      data = VALUES(data)`,
       [seasonYear, category_id, category_name, competition_name, JSON.stringify({ groups: response.data.category.groups })]
     );
@@ -188,7 +189,6 @@ async function main() {
        await fetchAndStoreStandings(cat);
     }
   }
-  await generateHTMLStandings();
 
   await pool.end();
 }
