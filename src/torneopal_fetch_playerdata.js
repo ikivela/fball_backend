@@ -67,7 +67,7 @@ async function main() {
         console.log(`Error: ${data.call.error} [${player.player_id}]`);
       }
     } catch (e) {
-      console.error(`Error for player_id ${player.player_id}:`, e.message);
+      console.error(`Error for player ${player.lastname} ${player.firstname) (${player.player_id}):`, e.message);
     }
     // 1 sekunnin viive jokaisen API-kutsun jälkeen
     await new Promise(resolve => setTimeout(resolve, 1000));
