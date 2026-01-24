@@ -28,6 +28,15 @@ module.exports = {
       autorestart: false,
     },
     {
+      name: 'fball_fetch_standings',
+      script: 'node src/torneopal_generate_standings.js',
+      instances: 1,
+      exec_mode: 'fork',
+      cron_restart: '40 21 * * *',
+      watch: false,
+      autorestart: false,
+    },
+     {
       name: 'fball_todays_games',
       script: 'node src/torneopal_fetch_results.js',
       instances: 1,
