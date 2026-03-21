@@ -151,10 +151,15 @@ app.post('/login', async (req, res) => {
       if (conn) pool.releaseConnection(conn);
       return res.status(401).json({ error: 'Invalid username or password' });
     }
-    // Generoi token
-    const token = crypto.createHash('sha256').update(username + password + salt + Date.now()).digest('hex');
-    // Tallenna token ja valid_login users-tauluun
-    await conn.query('UPDATE users SET token = ?, valid_login = NOW() WHERE username = ?', [token, username]);
+    // Jos käyttäjällä on jo token, käytä sitä. Muuten generoi uusi.
+    let token = user.token;
+    if (!token || token === 'default_token') {
+      token = crypto.createHash('sha256').update(username + password + salt + Date.now()).digest('hex');
+      await conn.query('UPDATE users SET token = ?, valid_login = NOW() WHERE username = ?', [token, username]);
+    } else {
+      // Päivitä vain valid_login
+      await conn.query('UPDATE users SET valid_login = NOW() WHERE username = ?', [username]);
+    }
     if (conn) pool.releaseConnection(conn);
     return res.status(200).json({ token });
   } catch (err) {
