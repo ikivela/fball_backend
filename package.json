@@ -1,6 +1,7 @@
 {
   "name": "fball_backend",
   "version": "1.0.0",
+  "type": "module",
   "description": "Webscraping finnish floorball API",
   "main": "src/backend.js",
   "scripts": {
