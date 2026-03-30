@@ -1,3 +1,7 @@
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+const require = createRequire(import.meta.url);
+
 var axios = require('axios');
 var fs = require('fs');
 const { DateTime } = require('luxon');
@@ -52,8 +56,10 @@ if (!token) {
   process.exit(1);
 }
 var season = getEnvVar('season', '2025-2026');
-var start_date = getEnvVar('start_date', '2025-08-01');
-var end_date = getEnvVar('end_date', '2026-05-30');
+var default_start_date = DateTime.local().minus({ weeks: 2 }).toISODate();
+var default_end_date = DateTime.local().plus({ weeks: 2 }).toISODate();
+var start_date = getEnvVar('start_date', default_start_date);
+var end_date = getEnvVar('end_date', default_end_date);
 var club_id = getEnvVar('your_club_id', null);
 if (!club_id) {
   console.error('Club ID is required. Set the club_id environment variable.');
@@ -61,7 +67,7 @@ if (!club_id) {
 }
 
 var getGames = async function (param) {
-
+	let games;
 	try {
 
 		let response = await axios.get(`${base_url}/getMatches?club_id=${club_id}&start_date=${start_date}&end_date=${end_date}&api_key=${token}`);
@@ -142,23 +148,39 @@ async function insertDataIntoGames(year, gameData) {
     const [rows] = await connection.execute(
       `SELECT match_id FROM \`${tablename}\` WHERE match_id = ?`, [gameData.match_id]
     );
+    // Tarkista onko peli menneisyydessä ja ilman tulosta
+    const gameDate = DateTime.fromISO(gameData.date);
+    const isPast = gameDate < DateTime.local().startOf('day');
+    const notPlayed = !gameData.status || gameData.status === 'Fixture';
+
     if (rows.length === 0) {
-      // Ei löytynyt, lisää uusi
-      await connection.execute(
-        `INSERT INTO \`${tablename}\` (${columns}) VALUES (${values.map(() => '?').join(', ')})`,
-        values
-      );
-      console.log(`Inserted new game with match_id ${gameData.match_id}`);
-    } else {
-      // Ottelu löytyy jo, tarkista on päivä sama
-      if (rows[0].date !== gameData.date) {
+      // Ei löytynyt — lisää vain jos pelillä on tulos tai se on tulevaisuudessa (tai force-rewrite)
+      if (isPast && notPlayed && !forceRewrite) {
+        console.log(`Skipping past game not played (status: ${gameData.status}): match_id ${gameData.match_id}`);
+      } else {
         await connection.execute(
-          `UPDATE \`${tablename}\` SET date = ?, time = ? WHERE match_id = ?`,
-          [gameData.date, gameData.time, gameData.match_id]
+          `INSERT INTO \`${tablename}\` (${columns}) VALUES (${values.map(() => '?').join(', ')})`,
+          values
         );
-        console.log(`Updated date for game with match_id ${gameData.match_id}`);
+        console.log(`Inserted new game with match_id ${gameData.match_id}`);
       }
-      //console.log(`Game with match_id ${gameData.match_id} already exists, skipping insert.`);
+    } else {
+      // Ottelu löytyy jo
+      if (isPast && notPlayed && !forceRewrite) {
+        // Peli on menneisyydessä eikä pelattu — poista tietokannasta
+        await connection.execute(
+          `DELETE FROM \`${tablename}\` WHERE match_id = ?`,
+          [gameData.match_id]
+        );
+        console.log(`Deleted past game without result: match_id ${gameData.match_id}`);
+      } else {
+        // Päivitä pelin tiedot
+        await connection.execute(
+          `UPDATE \`${tablename}\` SET date = ?, time = ?, matchdata = ? WHERE match_id = ?`,
+          [gameData.date, gameData.time, JSON.stringify(gameData), gameData.match_id]
+        );
+        console.log(`Updated game with match_id ${gameData.match_id}`);
+      }
     }
   } catch (error) {
     console.error(`Error inserting data for match_id ${gameData.match_id}:`, error);
@@ -178,6 +200,12 @@ async function insertIntoDatabase(year, games) {
   const connection = await pool.getConnection();
   const tablename = `${year}_games`;
   await initGameTable(year); // Ensure the table is initialized
+
+  if (clearFirst) {
+    await connection.execute(`DELETE FROM \`${tablename}\``);
+    console.log(`Cleared all rows from ${tablename}`);
+  }
+
   console.log("Games length", games.length);  
 
   try {
@@ -212,11 +240,34 @@ async function doFetch() {
   }
 }
 
-doFetch().catch((error) => {
-  console.error(error);
+// Parse command line flags
+const forceRewrite = process.argv.includes('--force-rewrite');
+const clearFirst = process.argv.includes('--clear');
+const fetchAll = process.argv.includes('--all');
+
+// If --all, --force-rewrite or --clear, use full season date range
+if (fetchAll || forceRewrite || clearFirst) {
+  start_date = '2025-08-01';
+  end_date = '2026-05-30';
 }
-).then(() => {
-  console.log('All done');
-  process.exit(0);
-});
+
+// Export for testing
+export { insertDataIntoGames, initGameTable, pool };
+
+// Run only when executed directly
+const __filename = fileURLToPath(import.meta.url);
+if (process.argv[1] === __filename) {
+  if (forceRewrite) {
+    console.log('Force rewrite mode: all games will be written to database');
+  }
+  if (clearFirst) {
+    console.log('Clear mode: table will be emptied before inserting');
+  }
+  doFetch().catch((error) => {
+    console.error(error);
+  }).then(() => {
+    console.log('All done');
+    process.exit(0);
+  });
+}
 
