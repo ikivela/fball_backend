@@ -1,9 +1,9 @@
-var axios = require('axios');
-var fs = require('fs');
-const { DateTime } = require('luxon');
-require('dotenv').config();
-const mysql = require('mysql2/promise');
-require('dotenv').config();
+import axios from 'axios';
+import fs from 'fs';
+import { DateTime } from 'luxon';
+import dotenv from 'dotenv';
+import mysql from 'mysql2/promise';
+dotenv.config();
 
 // Ympäristömuuttujat ja apumuuttujat
 const base_url = 'https://salibandy.api.torneopal.com/taso/rest/';

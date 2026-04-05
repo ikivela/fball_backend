@@ -1,17 +1,15 @@
-import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
-const require = createRequire(import.meta.url);
-
-var axios = require('axios');
-var fs = require('fs');
-const { DateTime } = require('luxon');
-
-const mysql = require('mysql2/promise');
-require('dotenv').config()
+import axios from 'axios';
+import fs from 'fs';
+import { DateTime } from 'luxon';
+import mysql from 'mysql2/promise';
+import dotenv from 'dotenv';
+import consolestamp from 'console-stamp';
+dotenv.config();
 
 // Create the connection pool. The pool-specific settings are the defaults
 const pool = mysql.createPool({
-  host: process.env.DB_HOST,  user: process.env.DB_USER,
+  host: process.env.DB_HOST, user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   waitForConnections: true,
@@ -23,14 +21,11 @@ const pool = mysql.createPool({
   keepAliveInitialDelay: 0
 });
 
-// add timestamps in front of log messages
-require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss');
+consolestamp(console, 'yyyy-mm-dd HH:MM:ss');
 
 var base_url = 'https://salibandy.api.torneopal.com/taso/rest/';
 
 var basepath = './data/';
-const { resolve } = require('path');
-const { connect } = require('http2');
 
 // Helper function to validate year/season (must be 4-digit year)
 function validateYear(year) {
@@ -67,18 +62,18 @@ if (!club_id) {
 }
 
 var getGames = async function (param) {
-	let games;
-	try {
+  let games;
+  try {
 
-		let response = await axios.get(`${base_url}/getMatches?club_id=${club_id}&start_date=${start_date}&end_date=${end_date}&api_key=${token}`);
+    let response = await axios.get(`${base_url}/getMatches?club_id=${club_id}&start_date=${start_date}&end_date=${end_date}&api_key=${token}`);
     games = response.data;
-	} catch (e) {
-		console.log(base_url);
-		console.error(e);
-		games = [];
-	}
+  } catch (e) {
+    console.log(base_url);
+    console.error(e);
+    games = [];
+  }
 
-	return games;
+  return games;
 };
 
 // Function to process empty string values to null
@@ -188,7 +183,7 @@ async function insertDataIntoGames(year, gameData) {
   }
   connection.release();
 }
- 
+
 
 
 async function insertIntoDatabase(year, games) {
@@ -206,13 +201,13 @@ async function insertIntoDatabase(year, games) {
     console.log(`Cleared all rows from ${tablename}`);
   }
 
-  console.log("Games length", games.length);  
+  console.log("Games length", games.length);
 
   try {
     for (let game of games) {
       // Process empty strings to null
       processEmptyToNull(game);
-      if ( !game.match_id ) {
+      if (!game.match_id) {
         console.log("Error: no match_id");
         continue;
       }
@@ -230,7 +225,7 @@ async function insertIntoDatabase(year, games) {
 }
 
 async function doFetch() {
-	try {
+  try {
     var games = await getGames();
     current_season = games.season + 1 || current_season; // Use the season from the fetched data if available
     console.log(`Current season: ${current_season}`);

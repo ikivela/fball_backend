@@ -1,10 +1,12 @@
-var axios = require('axios');
-var fs = require('fs');
-const { DateTime } = require('luxon');
-require('dotenv').config()
+import axios from 'axios';
+import fs from 'fs';
+import { DateTime } from 'luxon';
+import dotenv from 'dotenv';
+import consolestamp from 'console-stamp';
+dotenv.config();
 
 // add timestamps in front of log messages
-require('console-stamp')(console, 'yyyy-mm-dd HH:MM:ss');
+consolestamp(console, 'yyyy-mm-dd HH:MM:ss');
 
 var base_url = 'https://salibandy.api.torneopal.com/taso/rest/';
 
