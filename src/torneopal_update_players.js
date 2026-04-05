@@ -1,6 +1,7 @@
-const mysql = require('mysql2/promise');
-const axios = require('axios');
-require('dotenv').config();
+import mysql from 'mysql2/promise';
+import axios from 'axios';
+import dotenv from 'dotenv';
+dotenv.config();
 
 
 async function updatePlayer(player) {
@@ -31,7 +32,7 @@ async function updatePlayer(player) {
         'INSERT INTO players (firstname, lastname, player_id, birth_year, player_data) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE birth_year = VALUES(birth_year), player_data = VALUES(player_data)',
         [player.first_name, player.last_name, player.player_id, BirthYear, JSON.stringify(data.player)]
       );
-      
+
     } else {
       console.log(`Player not found: ${player.player_id}: ${data}`);
     }
@@ -42,4 +43,4 @@ async function updatePlayer(player) {
   }
 }
 
-module.exports = { updatePlayer };
+export { updatePlayer };

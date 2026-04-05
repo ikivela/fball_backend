@@ -126,22 +126,14 @@ var saveGames = async function (game, season) {
 
 async function fetchStatsDB(from_date) {
 
-  // validate year from yyy-MM-DD format
-  if (!from_date || !DateTime.fromFormat(from_date, 'yyyy-MM-dd').isValid) {
-    console.error(`Invalid date format for from_date: ${from_date}. Expected format is yyyy-MM-dd.`);
-    process.exit(1);
-  }
-  console.log(from_date);
-  from_date = DateTime.fromFormat(from_date, 'yyyy-MM-dd');
-  const db_year = from_date.month > 6 ? from_date.plus({ years: 1 }).year : from_date.year;
-  console.log("Fetching games for date:", from_date.toFormat('yyyy-MM-dd'), "from db_year", db_year);
+  var db_year = '2026';
   const connection = pool.getConnection();
   const tablename = `\`${db_year}_games\``;
 
-  let sql = `SELECT * FROM ${tablename} WHERE date = ?`;
+  let sql = `SELECT * FROM ${tablename};`;
   let games = [];
   try {
-    const [rows, fields] = await pool.query(sql, [from_date.toFormat('yyyy-MM-dd')]);
+    const [rows, fields] = await pool.query(sql, []);
     games = rows;
     console.log("Found %s games", games.length);
   } catch (e) {
@@ -167,15 +159,8 @@ async function fetchStatsDB(from_date) {
 
 async function fetchTodaysResults(from_date) {
   // from_date can be undefined or a string
-  let date;
-  if (!from_date) {
-    console.log("No from_date provided, using today's date");
-    date = DateTime.now().toFormat('yyyy-MM-dd');
-    console.log("Today:", date);
-  } else {
-    date = from_date;
-    console.log("From date:", date);
-  }
+  let date = "all";
+
   await fetchStatsDB(date);
 }
 
