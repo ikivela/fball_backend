@@ -135,7 +135,7 @@ async function fetchStatsDB(from_date) {
   from_date = DateTime.fromFormat(from_date, 'yyyy-MM-dd');
   const db_year = from_date.month > 6 ? from_date.plus({ years: 1 }).year : from_date.year;
   console.log("Fetching games for date:", from_date.toFormat('yyyy-MM-dd'), "from db_year", db_year);
-  const connection = pool.getConnection();
+  const connection = await pool.getConnection();
   const tablename = `\`${db_year}_games\``;
 
   let sql = `SELECT * FROM ${tablename} WHERE date = ?`;

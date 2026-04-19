@@ -171,8 +171,8 @@ async function insertDataIntoGames(year, gameData) {
       } else {
         // Päivitä pelin tiedot
         await connection.execute(
-          `UPDATE \`${tablename}\` SET date = ?, time = ?, matchdata = ? WHERE match_id = ?`,
-          [gameData.date, gameData.time, JSON.stringify(gameData), gameData.match_id]
+          `UPDATE \`${tablename}\` SET date = ?, time = ? WHERE match_id = ?`,
+          [gameData.date, gameData.time, gameData.match_id]
         );
         console.log(`Updated game with match_id ${gameData.match_id}`);
       }
@@ -219,7 +219,6 @@ async function insertIntoDatabase(year, games) {
   } finally {
     console.log("Closing connection");
     connection.release();
-    resolve();
   }
 
 }
