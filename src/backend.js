@@ -100,7 +100,10 @@ const datapath = path.join(path.resolve(__dirname), '../data/');
 /*
  *  App Configuration
  */
-app.use(cors());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || '*',
+  methods: ['GET', 'POST'],
+}));
 // Käyttäjän rekisteröinti
 app.post('/register', requireApiToken, async (req, res) => {
   const { username, password } = req.body;
@@ -131,7 +134,6 @@ app.post('/register', requireApiToken, async (req, res) => {
 // Kirjautumisreitti
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
-  const salt = process.env.PASSWORD_SALT || 'default_salt';
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required' });
   }
@@ -154,7 +156,7 @@ app.post('/login', async (req, res) => {
     // Jos käyttäjällä on jo token, käytä sitä. Muuten generoi uusi.
     let token = user.token;
     if (!token || token === 'default_token') {
-      token = crypto.createHash('sha256').update(username + password + salt + Date.now()).digest('hex');
+      token = crypto.randomBytes(32).toString('hex');
       await conn.query('UPDATE users SET token = ?, valid_login = NOW() WHERE username = ?', [token, username]);
     } else {
       // Päivitä vain valid_login
@@ -217,65 +219,7 @@ app.get('/standings/', requireApiToken, async (req, res) => {
     res.status(500).end();
   }
 });
-/*
-    if (files.includes(filename)) {
-      // Serve the specified file
-      const filePath = path.join(dirpath, filename);
-      res.sendFile(filePath);
-    } else {
-      let tablerows = '';
-      for (let file of files) {
-        const filePath = path.join(dirpath, file);
-        const stats = await fs.statSync(filePath);
-        // Format the timestamp to a custom format
-        const formattedTimestamp = stats.mtime.toLocaleString('fi-FI', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-        });
 
-        tablerows += `
-                <tr>
-                  <td><a href="${fullUrl}?filename=${file}">${file}</a></td>
-                  <td>${stats.size} bytes</td>
-                  <td>${formattedTimestamp}</td>
-                </tr>`;
-      }
-
-      const html = `
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <title>${process.env.your_team_name} ottelut, sarjataulukot</title>
-              </head>
-              <body>
-                <h1>Sarjataulukot</h1>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>File Name</th>
-                      <th>Size</th>
-                      <th>Last Modified</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${tablerows}
-                  </tbody>
-                </table>
-              </body>
-            </html>
-          `;
-
-      res.send(html);
-    }
-  } catch (_error) {
-    console.error(_error);
-  }
-});
-*/
 
 app.get('/roster/', requireApiToken, async (req, res) => {
   const conn = await pool.getConnection();
@@ -381,8 +325,14 @@ app.get('/seasonstats/', requireApiToken, async (req, res) => {
 app.get('/gamestats/', requireApiToken, async (req, res) => {
   const year = req.query.season;
   const gameid = req.query.gameid;
-  let sql = `SELECT matchdata FROM ${year}_games WHERE match_id = ?`;
-  if (year < 2024) sql = `SELECT * FROM ${year}_games WHERE UniqueID = ?`;
+  if (!validateYear(year)) {
+    return res.status(400).json({ error: 'Invalid season parameter' });
+  }
+  if (!gameid) {
+    return res.status(400).json({ error: 'Missing gameid parameter' });
+  }
+  let sql = `SELECT matchdata FROM \`${year}_games\` WHERE match_id = ?`;
+  if (year < 2024) sql = `SELECT * FROM \`${year}_games\` WHERE UniqueID = ?`;
   const conn = await pool.getConnection();
   try {
     const [rows, fields] = await conn.query(sql, [gameid]);
@@ -456,9 +406,13 @@ var getPlayers = async function (birth_year) {
   let gender = "";
   let tablename = `players`;
   let sql = `SELECT player_id, firstname, lastname, birth_year, player_data FROM ${tablename}`;
-  if (birth_year) sql += ` WHERE birth_year = ${birth_year}`;
+  const queryParams = [];
+  if (birth_year) {
+    sql += ` WHERE birth_year = ?`;
+    queryParams.push(birth_year);
+  }
   try {
-    const [rows, fields] = await conn.query(sql);
+    const [rows, fields] = await conn.query(sql, queryParams);
     players = rows.map(row => {
       let games_per_year = {};
       if (row.player_data) {
