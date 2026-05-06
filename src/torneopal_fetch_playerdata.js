@@ -1,6 +1,7 @@
-const mysql = require('mysql2/promise');
-const axios = require('axios');
-require('dotenv').config();
+import mysql from 'mysql2/promise';
+import axios from 'axios';
+import dotenv from 'dotenv';
+dotenv.config();
 
 async function main() {
   const pool = mysql.createPool({
@@ -67,7 +68,7 @@ async function main() {
         console.log(`Error: ${data.call.error} [${player.player_id}]`);
       }
     } catch (e) {
-      console.error(`Error for player ${player.lastname} ${player.firstname) (${player.player_id}):`, e.message);
+      console.error(`Error for player ${player.lastname} ${player.firstname} (${player.player_id}):`, e.message);
     }
     // 1 sekunnin viive jokaisen API-kutsun jälkeen
     await new Promise(resolve => setTimeout(resolve, 1000));
