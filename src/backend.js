@@ -322,6 +322,35 @@ app.get('/seasonstats/', requireApiToken, async (req, res) => {
   }
 });
 
+app.get('/alltime-stats/', requireApiToken, async (req, res) => {
+  try {
+    const conn = await pool.getConnection();
+    const [rows] = await conn.query('SELECT stats FROM stats');
+    conn.release();
+
+    const playerMap = {};
+
+    for (const row of rows) {
+      const players = typeof row.stats === 'string' ? JSON.parse(row.stats) : row.stats;
+      for (const p of players) {
+        if (!playerMap[p.name]) {
+          playerMap[p.name] = { name: p.name, goals: 0, assists: 0, total: 0, penalties: 0 };
+        }
+        playerMap[p.name].goals += p.goals || 0;
+        playerMap[p.name].assists += p.assists || 0;
+        playerMap[p.name].total += p.total || 0;
+        playerMap[p.name].penalties += p.penalties || 0;
+      }
+    }
+
+    const allTime = Object.values(playerMap).sort((a, b) => b.total - a.total);
+    return res.status(200).json(allTime);
+  } catch (err) {
+    console.error(err);
+    res.status(500).end();
+  }
+});
+
 app.get('/gamestats/', requireApiToken, async (req, res) => {
   const year = req.query.season;
   const gameid = req.query.gameid;
