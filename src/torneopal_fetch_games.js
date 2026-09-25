@@ -69,7 +69,7 @@ var getGames = async function (param) {
     games = response.data;
   } catch (e) {
     console.log(base_url);
-    console.error(e);
+    console.error(e.message);
     games = [];
   }
 

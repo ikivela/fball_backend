@@ -50,7 +50,7 @@ var getStandings = async function (cat_id) {
     return response.data;
   } catch (e) {
     console.log(base_url);
-    console.error(e);
+    console.error(e.message);
     games = [];
   }
 

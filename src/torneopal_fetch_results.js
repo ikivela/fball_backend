@@ -79,7 +79,7 @@ var saveGames = async function (game, season) {
     var stats = await axios.post(game_url);
     //console.log(`Fetched stats for game ${game.match_id} from API`);
     //console.log(`API response for game ${game.match_id}:`, stats.data);
-    if (stats.data == 'Invalid key') throw new Error('Invalid key for game_url', game_url);
+    if (stats.data == 'Invalid key') throw new Error('Invalid API key');
     // Save to Database
     const tablename = `\`${season}_games\``;
     processEmptyToNull(stats.data.match);
@@ -120,7 +120,7 @@ var saveGames = async function (game, season) {
     const [rows, fields] = await pool.query(sql, values);
     if (rows.affectedRows > 0) console.log("Game", game.match_id, "saved to database");
   } catch (e) {
-    console.error(e);
+    console.error(`Error fetching game ${game.match_id}:`, e.message);
   }
 }
 

@@ -6,3 +6,5 @@ stats
 .env
 tmp/
 *.DS_Store
+tmp.json
+myfile.txt

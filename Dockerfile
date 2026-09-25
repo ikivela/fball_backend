@@ -1,4 +1,4 @@
-FROM mhart/alpine-node:16.4.2
+FROM node:22-slim
 
 ENV APP_DIR /app/
 
@@ -9,7 +9,7 @@ WORKDIR $APP_DIR
 ADD . $APP_DIR
 
 # Install dependencies
-RUN npm install --production
+RUN npm ci --omit=dev
 
 EXPOSE 3000
 

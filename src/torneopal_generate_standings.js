@@ -15,6 +15,15 @@ function validateYear(year) {
   return /^\d{4}$/.test(year) ? year : null;
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -71,7 +80,7 @@ async function generateHTMLStandings() {
       }
       let htmltable = '';
       for (const group of row.data.groups) {
-        const name = `<h4>${row.category_name} ${group.group_name}</h4>\n<table><tr>
+        const name = `<h4>${escapeHtml(row.category_name)} ${escapeHtml(group.group_name)}</h4>\n<table><tr>
       <th>Joukkue</th>
       <th>O</th>
       <th>V</th>
@@ -86,8 +95,8 @@ async function generateHTMLStandings() {
         const standings = group.teams
           .map(item => `
             <tr>
-                <td>${item.team_name}</td>
-                <td>${item.matches_played}</td>
+                <td>${escapeHtml(item.team_name)}</td>
+                <td>${escapeHtml(item.matches_played)}</td>
                 <td>${item.matches_won || ""}</td>
                 <td>${item.matches_tiedwon || ""}</td>
                 <td>${item.matches_tied || ""}</td>
@@ -105,7 +114,7 @@ async function generateHTMLStandings() {
 <!DOCTYPE html>
 <html>
 <head>
-    <title>${row.category_name} salibandy</title>
+    <title>${escapeHtml(row.category_name)} salibandy</title>
     <style>
         table {
             border-collapse: collapse;
@@ -121,7 +130,7 @@ async function generateHTMLStandings() {
   ${htmltable}
 </body>
 </html>`;
-      const filename = `${row.category_name.replace(' ', '_')}`;
+      const filename = row.category_name.replace(/[^\p{L}\p{N}_-]+/gu, '_');
       await fs.writeFileSync(
         `${basepath}/files/${filename}.html`,
         htmlContent
@@ -140,7 +149,7 @@ async function fetchAndStoreStandings(category) {
     const response = await axios.get(url);
    
     if (response.data.call.status == 'error') {
-      console.error(category.name, url);
+      console.error(category.category_id, category.competition_id);
       console.error(response.data.call.error);
       return;
     }
@@ -166,7 +175,7 @@ async function fetchAndStoreStandings(category) {
 
     connection.release();
   } catch (e) {
-    console.error(e);
+    console.error(e.message);
   }
 }
 

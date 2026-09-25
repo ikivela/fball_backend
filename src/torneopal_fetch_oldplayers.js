@@ -32,7 +32,7 @@ var searchPlayer = async function (search_text, season, club_id) {
     return response.data;
   } catch (e) {
     console.log(base_url);
-    console.error(e);
+    console.error(e.message);
     games = [];
   }
 

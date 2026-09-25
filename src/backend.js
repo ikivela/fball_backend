@@ -58,6 +58,7 @@ if (!token) {
 }
 
 const app = express();
+app.disable('x-powered-by');
 app.set('view engine', 'ejs');
 app.use(bodyParser.json());
 app.use(
@@ -65,6 +66,11 @@ app.use(
     extended: true,
   })
 );
+// Tokenit tallennetaan kantaan SHA-256-tiivisteinä
+function hashToken(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
 // Middleware apitokenin tarkistukseen
 async function requireApiToken(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -72,10 +78,12 @@ async function requireApiToken(req, res, next) {
     return res.status(401).json({ error: 'Invalid or missing API token' });
   }
   const userToken = authHeader.replace('Bearer ', '');
+  // Vanha rekisteröinnin oletustoken ei kelpaa tunnistautumiseen
+  if (!userToken || userToken === 'default_token') {
+    return res.status(401).json({ error: 'Invalid or missing API token' });
+  }
   try {
-    const conn = await pool.getConnection();
-    const [rows] = await conn.query('SELECT * FROM users WHERE token = ?', [userToken]);
-    if (conn) pool.releaseConnection(conn);
+    const [rows] = await pool.query('SELECT valid_login FROM users WHERE token = ?', [hashToken(userToken)]);
     if (rows.length === 0) {
       return res.status(401).json({ error: 'Invalid or missing API token' });
     }
@@ -104,65 +112,52 @@ app.use(cors({
   origin: process.env.CORS_ORIGIN || '*',
   methods: ['GET', 'POST'],
 }));
-// Käyttäjän rekisteröinti
-app.post('/register', requireApiToken, async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password required' });
+// Epäonnistuneiden kirjautumisten rajoitus IP-osoitteittain
+const LOGIN_MAX_FAILURES = 5;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const loginFailures = new Map();
+
+function isLoginBlocked(ip) {
+  const entry = loginFailures.get(ip);
+  if (!entry) return false;
+  if (Date.now() - entry.first > LOGIN_WINDOW_MS) {
+    loginFailures.delete(ip);
+    return false;
   }
-  try {
-    const conn = await pool.getConnection();
-    // Tarkista onko käyttäjä jo olemassa
-    const [rows] = await conn.query('SELECT * FROM users WHERE username = ?', [username]);
-    if (rows.length > 0) {
-      if (conn) pool.releaseConnection(conn);
-      return res.status(409).json({ error: 'Username already exists' });
-    }
-    // Hashaa salasana
-    const hash = await bcrypt.hash(password, 10);
-    // Luo oletus-token
-    const defaultToken = 'default_token';
-    // Luo käyttäjä
-    await conn.query('INSERT INTO users (username, password, token, valid_login) VALUES (?, ?, ?, NOW())', [username, hash, defaultToken, Date.now()]);
-    if (conn) pool.releaseConnection(conn);
-    return res.status(201).json({ message: 'User registered', token: defaultToken });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'Registration failed' });
+  return entry.count >= LOGIN_MAX_FAILURES;
+}
+
+function recordLoginFailure(ip) {
+  const entry = loginFailures.get(ip);
+  if (!entry || Date.now() - entry.first > LOGIN_WINDOW_MS) {
+    loginFailures.set(ip, { count: 1, first: Date.now() });
+  } else {
+    entry.count++;
   }
-});
+}
+
 // Kirjautumisreitti
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) {
+  if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
     return res.status(400).json({ error: 'Username and password required' });
   }
+  if (isLoginBlocked(req.ip)) {
+    return res.status(429).json({ error: 'Too many failed login attempts, try again later' });
+  }
   try {
-    const conn = await pool.getConnection();
     // Hae käyttäjä users-taulusta
-    const [rows] = await conn.query('SELECT * FROM users WHERE username = ?', [username]);
-    if (rows.length === 0) {
-      if (conn) pool.releaseConnection(conn);
-      return res.status(401).json({ error: 'Invalid username or password' });
-    }
-    const user = rows[0];
-    console.log("User found:", user.username);
+    const [rows] = await pool.query('SELECT username, password FROM users WHERE username = ?', [username]);
     // Tarkista salasana bcryptillä
-    const match = await bcrypt.compare(password, user.password);
+    const match = rows.length > 0 && await bcrypt.compare(password, rows[0].password);
     if (!match) {
-      if (conn) pool.releaseConnection(conn);
+      recordLoginFailure(req.ip);
       return res.status(401).json({ error: 'Invalid username or password' });
     }
-    // Jos käyttäjällä on jo token, käytä sitä. Muuten generoi uusi.
-    let token = user.token;
-    if (!token || token === 'default_token') {
-      token = crypto.randomBytes(32).toString('hex');
-      await conn.query('UPDATE users SET token = ?, valid_login = NOW() WHERE username = ?', [token, username]);
-    } else {
-      // Päivitä vain valid_login
-      await conn.query('UPDATE users SET valid_login = NOW() WHERE username = ?', [username]);
-    }
-    if (conn) pool.releaseConnection(conn);
+    loginFailures.delete(req.ip);
+    // Uusi token jokaisella kirjautumisella, kantaan vain tiiviste
+    const token = crypto.randomBytes(32).toString('hex');
+    await pool.query('UPDATE users SET token = ?, valid_login = NOW() WHERE username = ?', [hashToken(token), username]);
     return res.status(200).json({ token });
   } catch (err) {
     console.error(err);
@@ -180,10 +175,8 @@ app.get('/', requireApiToken, (req, res) => {
 app.get('/standings/', requireApiToken, async (req, res) => {
 
   try {
-    const conn = await pool.getConnection();
     let sql = `SELECT category_id, season, category_name, data FROM standings ORDER BY season DESC`;
-    const [rows, fields] = await conn.query(sql);
-    if (conn) pool.releaseConnection(conn);
+    const [rows, fields] = await pool.query(sql);
     let standings = rows.map(row => {
       return {
         category_id: row.category_id,
@@ -222,7 +215,6 @@ app.get('/standings/', requireApiToken, async (req, res) => {
 
 
 app.get('/roster/', requireApiToken, async (req, res) => {
-  const conn = await pool.getConnection();
   const year = req.query.season ? req.query.season : new Date().getFullYear();
   const gameid = req.query.gameid;
 
@@ -246,18 +238,15 @@ app.get('/roster/', requireApiToken, async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).end();
-  } finally {
-    if (conn) pool.releaseConnection(conn);
   }
 });
 
 app.get('/seasons/', requireApiToken, async (req, res) => {
   // Read how many tables are in the database, and return the list of seasons
-  const conn = await pool.getConnection();
   let sql = 'SHOW TABLES';
   let tables = [];
   try {
-    const [rows, fields] = await conn.query(sql);
+    const [rows, fields] = await pool.query(sql);
     tables = rows.map((row) => {
       return row[Object.keys(row)[0]];
     });
@@ -270,32 +259,23 @@ app.get('/seasons/', requireApiToken, async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).end();
-  } finally {
-    if (conn) pool.releaseConnection(conn);
   }
 });
 
 app.get('/seasonstats/', requireApiToken, async (req, res) => {
   try {
-    const conn = await pool.getConnection();
     // Get all stats from database
     let sql = `SELECT season, category, stats FROM stats`;
-    const [rows, fields] = await conn.query(sql);
+    const [rows, fields] = await pool.query(sql);
 
-    if (rows.length === 0) {
-      conn.release();
-      return res.status(200).json([]);
-    } else {
-      let stats = rows.map(row => {
-        return {
-          season: row.season,
-          class: row.category,
-          stats: row.stats
-        };
-      });
-      conn.release();
-      return res.status(200).json(stats);
-    }
+    let stats = rows.map(row => {
+      return {
+        season: row.season,
+        class: row.category,
+        stats: row.stats
+      };
+    });
+    return res.status(200).json(stats);
     /*
 
     let stat_files = await fs.readdirSync(datapath + 'stats');
@@ -324,16 +304,17 @@ app.get('/seasonstats/', requireApiToken, async (req, res) => {
 
 app.get('/alltime-stats/', requireApiToken, async (req, res) => {
   try {
-    const conn = await pool.getConnection();
-    const gender = req.query.gender; // 'naisten' or 'miesten'
+    const gender = typeof req.query.gender === 'string' ? req.query.gender.toLowerCase() : req.query.gender; // 'naisten' or 'miesten'
+    if (gender && gender !== 'naisten' && gender !== 'miesten') {
+      return res.status(400).json({ error: 'Invalid gender parameter' });
+    }
     let rows;
     if (gender) {
-      const prefix = gender.charAt(0).toUpperCase() + gender.slice(1).toLowerCase();
-      [rows] = await conn.query('SELECT season, category, stats FROM stats WHERE category LIKE ?', [`${prefix}%`]);
+      const prefix = gender.charAt(0).toUpperCase() + gender.slice(1);
+      [rows] = await pool.query('SELECT season, category, stats FROM stats WHERE category LIKE ?', [`${prefix}%`]);
     } else {
-      [rows] = await conn.query('SELECT season, category, stats FROM stats');
+      [rows] = await pool.query('SELECT season, category, stats FROM stats');
     }
-    conn.release();
 
     // Filter out base categories when a "+" version exists for the same season
     // e.g. if "Miesten 2-divisioona + 1-divisioonakarsinta" exists, skip "Miesten 2-divisioona"
@@ -390,9 +371,8 @@ app.get('/gamestats/', requireApiToken, async (req, res) => {
   }
   let sql = `SELECT matchdata FROM \`${year}_games\` WHERE match_id = ?`;
   if (year < 2024) sql = `SELECT * FROM \`${year}_games\` WHERE UniqueID = ?`;
-  const conn = await pool.getConnection();
   try {
-    const [rows, fields] = await conn.query(sql, [gameid]);
+    const [rows, fields] = await pool.query(sql, [gameid]);
     let game = rows;
     let data = {};
     console.log("found gameid:", gameid);
@@ -406,8 +386,6 @@ app.get('/gamestats/', requireApiToken, async (req, res) => {
   } catch (e) {
     console.error(e);
     return res.status(500).end();
-  } finally {
-    if (conn) pool.releaseConnection(conn);
   }
 });
 
@@ -437,8 +415,8 @@ app.get('/games/', requireApiToken, async (req, res) => {
     var games = await getGames(year);
     res.status(200).json(games);
   } catch (err) {
-    console.log(err);
-    res.status(400).json(err);
+    console.error(err);
+    res.status(500).json({ error_message: 'Failed to fetch games' });
   }
 });
 
@@ -458,7 +436,6 @@ var getPlayers = async function (birth_year) {
     if (!validateYear(birth_year)) {
       throw new Error('Invalid year for birth_year')
     }
-  const conn = await pool.getConnection();
   let players = [];
   let gender = "";
   let tablename = `players`;
@@ -469,7 +446,7 @@ var getPlayers = async function (birth_year) {
     queryParams.push(birth_year);
   }
   try {
-    const [rows, fields] = await conn.query(sql, queryParams);
+    const [rows, fields] = await pool.query(sql, queryParams);
     players = rows.map(row => {
       let games_per_year = {};
       if (row.player_data) {
@@ -500,22 +477,19 @@ var getPlayers = async function (birth_year) {
     });
   } catch (e) {
     console.error(e);
-  } finally {
-    if (conn) pool.releaseConnection(conn);
-    return players;
   }
+  return players;
 }
 
 var getGames = async function (year) {
   if (!validateYear(year)) {
     throw new Error('Invalid year for table name');
   }
-  const conn = await pool.getConnection();
   let games = [];
   let tablename = `\`${year}_games\``;
   let sql = `SELECT * FROM ${tablename}`;
   try {
-    const [rows, fields] = await conn.query(sql);
+    const [rows, fields] = await pool.query(sql);
     games = rows;
     if (year > 2023) {
       games = games.map((match) => {
@@ -553,23 +527,18 @@ var getGames = async function (year) {
 
   } catch (e) {
     console.error(e);
-  } finally {
-    if (conn) pool.releaseConnection(conn);
-    return games;
   }
+  return games;
 }
 
 // Palauttaa kaikki pelaajan tiedot (mukaan lukien player_data) player_id:llä
 async function getPlayerDetails(player_id) {
-  const conn = await pool.getConnection();
   try {
-    const [rows] = await conn.query('SELECT * FROM players WHERE player_id = ?', [player_id]);
+    const [rows] = await pool.query('SELECT * FROM players WHERE player_id = ?', [player_id]);
     if (rows.length === 0) return null;
     return rows[0];
   } catch (e) {
     console.error(e);
     return null;
-  } finally {
-    if (conn) pool.releaseConnection(conn);
   }
 }

@@ -27,7 +27,7 @@ async function insertDataStats(year, category, data) {
       // Check if table name exists
       await connection.execute(`
         INSERT INTO ${tablename} (season, category, stats)
-        VALUES ('${year}', '${category}', '${JSON.stringify(data)}')`);
+        VALUES (?, ?, ?)`, [year, category, JSON.stringify(data)]);
   } catch (error) {
       console.error(`Error inserting data for year ${year} and category ${category}:`, error);
   }

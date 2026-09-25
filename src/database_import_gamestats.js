@@ -42,7 +42,7 @@ async function insertDataIntoGameStats(year, gameid, data) {
   try {
       await connection.execute(`
         INSERT INTO ${tablename} (gameid, events)
-        VALUES ('${gameid}', '${JSON.stringify(data)}')`);
+        VALUES (?, ?)`, [gameid, JSON.stringify(data)]);
 
       console.log(`Inserted gamestat with Gameid ${gameid}`);
   } catch (error) {
