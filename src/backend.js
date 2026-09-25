@@ -325,12 +325,38 @@ app.get('/seasonstats/', requireApiToken, async (req, res) => {
 app.get('/alltime-stats/', requireApiToken, async (req, res) => {
   try {
     const conn = await pool.getConnection();
-    const [rows] = await conn.query('SELECT stats FROM stats');
+    const gender = req.query.gender; // 'naisten' or 'miesten'
+    let rows;
+    if (gender) {
+      const prefix = gender.charAt(0).toUpperCase() + gender.slice(1).toLowerCase();
+      [rows] = await conn.query('SELECT season, category, stats FROM stats WHERE category LIKE ?', [`${prefix}%`]);
+    } else {
+      [rows] = await conn.query('SELECT season, category, stats FROM stats');
+    }
     conn.release();
+
+    // Filter out base categories when a "+" version exists for the same season
+    // e.g. if "Miesten 2-divisioona + 1-divisioonakarsinta" exists, skip "Miesten 2-divisioona"
+    const seasonCategories = {};
+    for (const row of rows) {
+      if (!seasonCategories[row.season]) seasonCategories[row.season] = [];
+      seasonCategories[row.season].push(row.category);
+    }
+
+    const filteredRows = rows.filter(row => {
+      if (!row.category.includes('+')) {
+        // Check if a "+" version exists that starts with this category name
+        const dominated = seasonCategories[row.season].some(
+          cat => cat !== row.category && cat.includes('+') && cat.startsWith(row.category)
+        );
+        return !dominated;
+      }
+      return true;
+    });
 
     const playerMap = {};
 
-    for (const row of rows) {
+    for (const row of filteredRows) {
       const players = typeof row.stats === 'string' ? JSON.parse(row.stats) : row.stats;
       for (const p of players) {
         if (!playerMap[p.name]) {
@@ -338,12 +364,14 @@ app.get('/alltime-stats/', requireApiToken, async (req, res) => {
         }
         playerMap[p.name].goals += p.goals || 0;
         playerMap[p.name].assists += p.assists || 0;
-        playerMap[p.name].total += p.total || 0;
         playerMap[p.name].penalties += p.penalties || 0;
       }
     }
 
-    const allTime = Object.values(playerMap).sort((a, b) => b.total - a.total);
+    const allTime = Object.values(playerMap).map(p => {
+      p.total = p.goals + p.assists;
+      return p;
+    }).sort((a, b) => b.total - a.total);
     return res.status(200).json(allTime);
   } catch (err) {
     console.error(err);
