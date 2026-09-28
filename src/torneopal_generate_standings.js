@@ -15,6 +15,13 @@ function validateYear(year) {
   return /^\d{4}$/.test(year) ? year : null;
 }
 
+// Kauden tunnus on kauden päättymisvuosi, esim. 2026-2027 -> 2027
+const seasonYear = validateYear(season.split('-').pop());
+if (!seasonYear) {
+  console.error(`Invalid season: ${season}`);
+  process.exit(1);
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -43,7 +50,7 @@ async function fetchCategories() {
   try {
     const connection = await pool.getConnection();
     const [rows] = await connection.query(
-      'SELECT DISTINCT category_id, competition_id, competition_name FROM 2026_games'
+      `SELECT DISTINCT category_id, competition_id, competition_name FROM \`${seasonYear}_games\``
     );
     connection.release();
     const uniqueSet = new Set();
@@ -68,9 +75,9 @@ async function fetchCategories() {
 // Generate HTML standings files from DB data
 async function generateHTMLStandings() {
   try {
-    console.log("Generating HTML standings...", season.split('-').pop());
+    console.log("Generating HTML standings...", seasonYear);
     const connection = await pool.getConnection();
-    const [rows] = await connection.query('SELECT * FROM standings WHERE season = ?', [season.split('-').pop()]);
+    const [rows] = await connection.query('SELECT * FROM standings WHERE season = ?', [seasonYear]);
     console.log(`Fetched ${rows.length} standings from database.`);
     return;
     for (const row of rows) {
@@ -152,11 +159,6 @@ async function fetchAndStoreStandings(category) {
       console.error(category.category_id, category.competition_id);
       console.error(response.data.call.error);
       return;
-    }
-    let seasonYear = season.split('-').pop();
-    if (!validateYear(seasonYear)) {
-      console.error(`Invalid year for table name: ${seasonYear}`);
-      process.exit(1);
     }
     console.log(`Storing standings for ${response.data.category.category_name} (${category.category_id})`);
     const connection = await pool.getConnection();
