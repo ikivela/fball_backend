@@ -74,16 +74,26 @@ var saveGames = async function (game, season) {
     console.error(`Invalid year for table name: ${season}`);
     process.exit(1);
   }
-  let game_url = `${base_url}getMatch?match_id=${game.match_id}&api_key=${token}&club_id=${club_id}`;
+  const match_id = game.match_id;
+  let game_url = `${base_url}getMatch?match_id=${match_id}&api_key=${token}&club_id=${club_id}`;
   try {
-    var stats = await axios.post(game_url);
-    //console.log(`Fetched stats for game ${game.match_id} from API`);
-    //console.log(`API response for game ${game.match_id}:`, stats.data);
-    if (stats.data == 'Invalid key') throw new Error('Invalid API key');
+    // API palauttaa toisinaan vastauksen ilman match-osiota: yritä kerran uudelleen,
+    // ja jos ei vieläkään onnistu, ohita ottelu eikä kaada koko ajoa
+    let stats = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      stats = await axios.post(game_url);
+      if (stats.data == 'Invalid key') throw new Error('Invalid API key');
+      if (stats.data && stats.data.match) break;
+      console.warn(`No match data for game ${match_id} (attempt ${attempt}):`, JSON.stringify(stats.data && stats.data.call ? stats.data.call.status : stats.data).slice(0, 200));
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 5000));
+    }
+    if (!stats.data || !stats.data.match) {
+      console.error(`Skipping game ${match_id}: no match data from API`);
+      return;
+    }
     // Save to Database
     const tablename = `\`${season}_games\``;
     processEmptyToNull(stats.data.match);
-    var game = {};
     game = stats.data.match;
     const matchData = JSON.stringify(stats.data.match);
     //const matchData = stats.data.match;
@@ -120,9 +130,13 @@ var saveGames = async function (game, season) {
     const [rows, fields] = await pool.query(sql, values);
     if (rows.affectedRows > 0) console.log("Game", game.match_id, "saved to database");
   } catch (e) {
-    console.error(`Error fetching game ${game.match_id}:`, e.message);
+    console.error(`Error fetching game ${match_id}:`, e.message);
   }
 }
+
+// Montako päivää taaksepäin haetaan uudelleen ottelut, jotka ovat kannassa vielä pelaamattomina
+// (pöytäkirja voi valmistua vasta illan ajon jälkeen)
+const RECHECK_DAYS = 7;
 
 async function fetchStatsDB(from_date) {
 
@@ -138,11 +152,16 @@ async function fetchStatsDB(from_date) {
   const connection = await pool.getConnection();
   const tablename = `\`${db_year}_games\``;
 
-  let sql = `SELECT * FROM ${tablename} WHERE date = ?`;
+  // Päivän ottelut sekä edellisten päivien ottelut, joilla ei vielä ole tulosta
+  let sql = `SELECT * FROM ${tablename} WHERE date = ?
+    OR (date >= ? AND date < ? AND (matchdata->>'$.status' IS NULL OR matchdata->>'$.status' <> 'Played'))`;
   let games = [];
   try {
-    const [rows, fields] = await pool.query(sql, [from_date.toFormat('yyyy-MM-dd')]);
-    games = rows;
+    const day = from_date.toFormat('yyyy-MM-dd');
+    const recheckFrom = from_date.minus({ days: RECHECK_DAYS }).toFormat('yyyy-MM-dd');
+    const [rows, fields] = await pool.query(sql, [day, recheckFrom, day]);
+    // Lajittelu tehdään täällä: ORDER BY isojen JSON-rivien kanssa ylittää kannan sort-muistin
+    games = rows.sort((a, b) => new Date(a.date) - new Date(b.date));
     console.log("Found %s games", games.length);
   } catch (e) {
     console.error(e);

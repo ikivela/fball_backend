@@ -497,13 +497,17 @@ var getGames = async function (year) {
           console.warn(`No match data found for game ${match.date}`);
           return {};
         } else {
+          const periodWins = getPeriodWinResult(match.matchdata);
           return {
             GameDate: match.matchdata.date,
             GameTime: match.matchdata.time,
             UniqueID: match.matchdata.match_id,
             HomeTeamName: match.matchdata.team_A_description_en,
             AwayTeamName: match.matchdata.team_B_description_en,
-            Result: `${match.matchdata.fs_A}-${match.matchdata.fs_B}`,
+            // Erävoittopeleissä tulos on erävoitot, maalit yhteensä erikseen
+            Result: periodWins ? periodWins.result : `${match.matchdata.fs_A}-${match.matchdata.fs_B}`,
+            GoalsResult: `${match.matchdata.fs_A}-${match.matchdata.fs_B}`,
+            PeriodScores: periodWins ? periodWins.periods : null,
             Game: `${match.matchdata.team_A_description_en}-${match.matchdata.team_B_description_en}`,
             group: match.matchdata.group_name,
             groupID: match.matchdata.category_abbrevation,
@@ -529,6 +533,28 @@ var getGames = async function (year) {
     console.error(e);
   }
   return games;
+}
+
+// Nuorten erävoittopeleissä (Torneopal: match_type "double") jokainen erä ratkaistaan erikseen.
+// Palauttaa erävoitot ("0-2") ja erien tulokset ("0-13, 1-17"), tai null jos kyse ei ole erävoittopelistä
+// tai eriä ei ole vielä pelattu.
+function getPeriodWinResult(m) {
+  if (m.match_type !== 'double') return null;
+  const periodCount = Number(m.period_count) || 0;
+  let winsA = 0;
+  let winsB = 0;
+  const periods = [];
+  for (let i = 1; i <= periodCount; i++) {
+    const scoreA = m[`p${i}s_A`];
+    const scoreB = m[`p${i}s_B`];
+    if (scoreA == null || scoreA === '' || scoreB == null || scoreB === '') continue;
+    periods.push(`${scoreA}-${scoreB}`);
+    const winner = m[`p${i}_winner`] || (Number(scoreA) > Number(scoreB) ? 'A' : Number(scoreB) > Number(scoreA) ? 'B' : '');
+    if (winner === 'A') winsA++;
+    else if (winner === 'B') winsB++;
+  }
+  if (periods.length === 0) return null;
+  return { result: `${winsA}-${winsB}`, periods: periods.join(', ') };
 }
 
 // Palauttaa kaikki pelaajan tiedot (mukaan lukien player_data) player_id:llä

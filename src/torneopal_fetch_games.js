@@ -186,6 +186,33 @@ async function insertDataIntoGames(year, gameData) {
 
 
 
+// Poistaa haetulta aikaväliltä pelaamattomat ottelut, joita Torneopal ei enää palauta
+// (siirretyt tai uudelleen luodut ottelut jäävät muuten kantaan haamuotteluiksi).
+// Pelattuja otteluita ei poisteta, jottei tilastoja menetetä.
+async function removeMissingGames(connection, tablename, games) {
+  if (!Array.isArray(games) || games.length === 0) {
+    console.warn('No games from API, skipping removal of missing games');
+    return;
+  }
+  const fetchedIds = new Set(games.map((g) => String(g.match_id)));
+  const [rows] = await connection.execute(
+    `SELECT match_id FROM \`${tablename}\` WHERE date BETWEEN ? AND ?
+      AND (matchdata->>'$.status' IS NULL OR matchdata->>'$.status' <> 'Played')`,
+    [start_date, end_date]
+  );
+  const missing = rows.map((r) => String(r.match_id)).filter((id) => !fetchedIds.has(id));
+  if (missing.length === 0) return;
+  // Varmistus: jos API palautti vajaan listan, älä poista puolta kannasta
+  if (missing.length > games.length / 2) {
+    console.warn(`Refusing to remove ${missing.length} missing games (API returned only ${games.length}), check API response`);
+    return;
+  }
+  for (const id of missing) {
+    await connection.execute(`DELETE FROM \`${tablename}\` WHERE match_id = ?`, [id]);
+    console.log(`Deleted game no longer in Torneopal: match_id ${id}`);
+  }
+}
+
 async function insertIntoDatabase(year, games) {
   // Validate year
   if (!validateYear(year)) {
@@ -214,6 +241,7 @@ async function insertIntoDatabase(year, games) {
       // pass each game to the insert function (no need to check for existing rows)
       await insertDataIntoGames(year, game);
     }
+    await removeMissingGames(connection, tablename, games);
   } catch (e) {
     console.error(e);
   } finally {
