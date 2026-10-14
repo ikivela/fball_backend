@@ -430,6 +430,29 @@ app.listen(port, () => {
   );
 });
 
+const ownClubId = String(getEnvVar('your_club_id', '368'));
+
+// Kausi muodossa "2026-2027"; uusi kausi alkaa elokuussa
+function seasonId(offset = 0) {
+  const now = DateTime.now();
+  const start = (now.month >= 8 ? now.year : now.year - 1) + offset;
+  return `${start}-${start + 1}`;
+}
+
+// Pelaaja on seuran nykyinen pelaaja, jos hänellä on joukkue seurassa (myös r-edustus),
+// tai seura on hänen kotiseuransa ja hän on pelannut seurassa tällä tai edellisellä kaudella
+// (kattaa kauden vaihteen, jolloin rekisteröintejä ei vielä ole).
+function isCurrentClubPlayer(pdata) {
+  if (!pdata) return false;
+  if (Array.isArray(pdata.teams) && pdata.teams.some(t => String(t.club_id) === ownClubId)) return true;
+  if (String(pdata.club_id) !== ownClubId) return false;
+  const recentSeasons = [seasonId(0), seasonId(-1)];
+  return (pdata.matches || []).some(m =>
+    recentSeasons.includes(m.season_id) &&
+    (String(m.club_A_id) === ownClubId || String(m.club_B_id) === ownClubId)
+  );
+}
+
 var getPlayers = async function (birth_year) {
 
   if (birth_year)
@@ -450,10 +473,14 @@ var getPlayers = async function (birth_year) {
     players = rows.map(row => {
       let games_per_year = {};
       let parallel_representations = [];
+      let current_player = null; // null = ei pelaajadataa, tila tuntematon
+      let club_name = '';
       if (row.player_data) {
         try {
           const pdata = row.player_data;
           gender = row.player_data.gender;
+          current_player = isCurrentClubPlayer(pdata);
+          club_name = pdata.club_abbrevation || pdata.club_name || '';
           // R-edustukset: joukkueet, joissa pelaaja pelaa kotiseuransa ulkopuolella rinnakkaisedustuksella
           if (Array.isArray(pdata.teams)) {
             parallel_representations = pdata.teams
@@ -485,7 +512,9 @@ var getPlayers = async function (birth_year) {
         birth_year: row.birth_year,
         gender: gender,
         games_per_year: games_per_year,
-        parallel_representations: parallel_representations
+        parallel_representations: parallel_representations,
+        current_player: current_player,
+        club_name: club_name
       };
     });
   } catch (e) {
