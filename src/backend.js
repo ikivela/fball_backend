@@ -449,10 +449,22 @@ var getPlayers = async function (birth_year) {
     const [rows, fields] = await pool.query(sql, queryParams);
     players = rows.map(row => {
       let games_per_year = {};
+      let parallel_representations = [];
       if (row.player_data) {
         try {
           const pdata = row.player_data;
           gender = row.player_data.gender;
+          // R-edustukset: joukkueet, joissa pelaaja pelaa kotiseuransa ulkopuolella rinnakkaisedustuksella
+          if (Array.isArray(pdata.teams)) {
+            parallel_representations = pdata.teams
+              .filter(t => t.parallel_representation === '1' && t.club_id !== pdata.club_id)
+              .map(t => ({
+                club_name: t.club_name || '',
+                club_abbrevation: t.club_abbrevation || '',
+                team_name: t.team_name || '',
+                category_name: t.primary_category?.category_name || ''
+              }));
+          }
           if (pdata.matches && Array.isArray(pdata.matches)) {
             pdata.matches.forEach(match => {
               const season = match.season_id || match.season || null;
@@ -472,7 +484,8 @@ var getPlayers = async function (birth_year) {
         lastname: row.lastname,
         birth_year: row.birth_year,
         gender: gender,
-        games_per_year: games_per_year
+        games_per_year: games_per_year,
+        parallel_representations: parallel_representations
       };
     });
   } catch (e) {
