@@ -575,9 +575,55 @@ async function getPlayerDetails(player_id) {
   try {
     const [rows] = await pool.query('SELECT * FROM players WHERE player_id = ?', [player_id]);
     if (rows.length === 0) return null;
-    return rows[0];
+    const player = rows[0];
+    await fillPlayerMatchStats(player);
+    return player;
   } catch (e) {
     console.error(e);
     return null;
   }
+}
+
+// Torneopalin getPlayer piilottaa juniorien ottelukohtaiset pisteet (player_stats_visibility "none"),
+// mutta ottelun kokoonpanossa ne ovat. Täydennetään puuttuvat maalit/syötöt tallennetusta otteludatasta.
+async function fillPlayerMatchStats(player) {
+  let pdata = player.player_data;
+  if (typeof pdata === 'string') {
+    try { pdata = JSON.parse(pdata); } catch (e) { return; }
+  }
+  if (!pdata || !Array.isArray(pdata.matches)) return;
+
+  const missingByYear = {};
+  pdata.matches.forEach(match => {
+    if (match.player_goals !== '' && match.player_goals != null) return;
+    const year = validateYear(String(match.season_id || '').split('-')[1]);
+    if (!year || Number(year) < 2024) return; // matchdata on tallessa vasta 2024 alkaen
+    (missingByYear[year] = missingByYear[year] || []).push(match);
+  });
+
+  for (const [year, matches] of Object.entries(missingByYear)) {
+    try {
+      const [games] = await pool.query(
+        `SELECT match_id, JSON_EXTRACT(matchdata, '$.lineups') AS lineups FROM \`${year}_games\` WHERE match_id IN (?)`,
+        [matches.map(m => m.match_id)]
+      );
+      const lineupsById = {};
+      games.forEach(g => {
+        const lineups = typeof g.lineups === 'string' ? JSON.parse(g.lineups) : g.lineups;
+        if (Array.isArray(lineups)) lineupsById[String(g.match_id)] = lineups;
+      });
+      matches.forEach(match => {
+        const entry = (lineupsById[String(match.match_id)] || [])
+          .find(l => String(l.player_id) === String(player.player_id));
+        if (!entry) return;
+        match.player_goals = String(entry.goals ?? 0);
+        match.player_assists = String(entry.assists ?? 0);
+        match.player_points = String(entry.points ?? (Number(entry.goals || 0) + Number(entry.assists || 0)));
+      });
+    } catch (e) {
+      // Kauden taulua ei välttämättä ole (esim. vain vieraan seuran otteluita)
+      console.warn(`Could not fill player stats from ${year}_games:`, e.message);
+    }
+  }
+  player.player_data = pdata;
 }
