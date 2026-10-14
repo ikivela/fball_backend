@@ -439,11 +439,19 @@ function seasonId(offset = 0) {
   return `${start}-${start + 1}`;
 }
 
+// Kuluvan kauden alku (1.8.)
+function seasonStart() {
+  return DateTime.fromObject({ year: Number(seasonId(0).split('-')[0]), month: 8, day: 1 });
+}
+
 // Pelaaja on seuran nykyinen pelaaja, jos hänellä on joukkue seurassa (myös r-edustus),
 // tai seura on hänen kotiseuransa ja hän on pelannut seurassa tällä tai edellisellä kaudella
 // (kattaa kauden vaihteen, jolloin rekisteröintejä ei vielä ole).
-function isCurrentClubPlayer(pdata) {
-  if (!pdata) return false;
+// Data pitää olla päivitetty tällä kaudella: muuten teams/club_id voivat olla edelliseltä kaudelta,
+// eikä seuraa vaihtanutta pelaajaa voi erottaa (ks. torneopal_fetch_playerdata.js cron-ajo).
+function isCurrentClubPlayer(pdata, lastUpdated) {
+  if (!pdata || !lastUpdated) return false;
+  if (DateTime.fromJSDate(new Date(lastUpdated)) < seasonStart()) return false;
   if (Array.isArray(pdata.teams) && pdata.teams.some(t => String(t.club_id) === ownClubId)) return true;
   if (String(pdata.club_id) !== ownClubId) return false;
   const recentSeasons = [seasonId(0), seasonId(-1)];
@@ -462,7 +470,7 @@ var getPlayers = async function (birth_year) {
   let players = [];
   let gender = "";
   let tablename = `players`;
-  let sql = `SELECT player_id, firstname, lastname, birth_year, player_data FROM ${tablename}`;
+  let sql = `SELECT player_id, firstname, lastname, birth_year, player_data, last_updated FROM ${tablename}`;
   const queryParams = [];
   if (birth_year) {
     sql += ` WHERE birth_year = ?`;
@@ -479,7 +487,7 @@ var getPlayers = async function (birth_year) {
         try {
           const pdata = row.player_data;
           gender = row.player_data.gender;
-          current_player = isCurrentClubPlayer(pdata);
+          current_player = isCurrentClubPlayer(pdata, row.last_updated);
           club_name = pdata.club_abbrevation || pdata.club_name || '';
           // R-edustukset: joukkueet, joissa pelaaja pelaa kotiseuransa ulkopuolella rinnakkaisedustuksella
           if (Array.isArray(pdata.teams)) {
@@ -514,7 +522,8 @@ var getPlayers = async function (birth_year) {
         games_per_year: games_per_year,
         parallel_representations: parallel_representations,
         current_player: current_player,
-        club_name: club_name
+        club_name: club_name,
+        last_updated: row.last_updated
       };
     });
   } catch (e) {

@@ -96,7 +96,7 @@ async function doFetch() {
             console.log(`Inserting/updating player ${playerdata.first_name} ${playerdata.last_name} ${BirthYear} with ID ${playerdata.player_id} to database`);
             
             await pool.query(
-            'INSERT INTO players (firstname, lastname, player_id, birth_year, player_data) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE birth_year = VALUES(birth_year), player_data = VALUES(player_data)',
+            'INSERT INTO players (firstname, lastname, player_id, birth_year, player_data, last_updated) VALUES (?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE birth_year = VALUES(birth_year), player_data = VALUES(player_data), last_updated = NOW()',
             [playerdata.first_name, playerdata.last_name, playerdata.player_id, BirthYear, JSON.stringify(playerdata)]
             );
 

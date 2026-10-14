@@ -29,7 +29,7 @@ async function updatePlayer(player) {
     if (data.call && data.call.status === 'OK' && data.player) {
       const BirthYear = data.player.birthyear;
       await pool.query(
-        'INSERT INTO players (firstname, lastname, player_id, birth_year, player_data) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE birth_year = VALUES(birth_year), player_data = VALUES(player_data)',
+        'INSERT INTO players (firstname, lastname, player_id, birth_year, player_data, last_updated) VALUES (?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE birth_year = VALUES(birth_year), player_data = VALUES(player_data), last_updated = NOW()',
         [player.first_name, player.last_name, player.player_id, BirthYear, JSON.stringify(data.player)]
       );
 

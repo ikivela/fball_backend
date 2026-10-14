@@ -45,6 +45,17 @@ module.exports = {
       watch: false,
       autorestart: false,
     },
+    {
+      // Kaikkien pelaajien tiedot kerran viikossa (su 04:30), jotta seuraa vaihtaneet
+      // tai lopettaneet pelaajat päivittyvät ja last_updated pysyy ajan tasalla
+      name: 'fball_update_players',
+      script: 'node src/torneopal_fetch_playerdata.js',
+      instances: 1,
+      exec_mode: 'fork',
+      cron_restart: '30 4 * * 0',
+      watch: false,
+      autorestart: false,
+    },
  /*    {
       name: 'fball_updateStats_job',
       script: 'npm run updateStats',

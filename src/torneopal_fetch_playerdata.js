@@ -57,7 +57,7 @@ async function main() {
         ) {
           // Päivitä player_data-kenttä
           await pool.query(
-            'UPDATE players SET birth_year = ?, player_data = ? WHERE player_id = ?',
+            'UPDATE players SET birth_year = ?, player_data = ?, last_updated = NOW() WHERE player_id = ?',
             [BirthYear, JSON.stringify(data.player), player.player_id]
           );
           console.log(`Updated player ${player.player_id}: ${player.firstname} ${player.lastname}`);
