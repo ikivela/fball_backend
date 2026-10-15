@@ -483,12 +483,14 @@ var getPlayers = async function (birth_year) {
       let parallel_representations = [];
       let current_player = null; // null = ei pelaajadataa, tila tuntematon
       let club_name = '';
+      let own_club = null; // onko pelaajan (viimeisin) kotiseura oma seura
       if (row.player_data) {
         try {
           const pdata = row.player_data;
           gender = row.player_data.gender;
           current_player = isCurrentClubPlayer(pdata, row.last_updated);
           club_name = pdata.club_abbrevation || pdata.club_name || '';
+          own_club = String(pdata.club_id) === ownClubId;
           // R-edustukset: joukkueet, joissa pelaaja pelaa kotiseuransa ulkopuolella rinnakkaisedustuksella
           if (Array.isArray(pdata.teams)) {
             parallel_representations = pdata.teams
@@ -523,6 +525,7 @@ var getPlayers = async function (birth_year) {
         parallel_representations: parallel_representations,
         current_player: current_player,
         club_name: club_name,
+        own_club: own_club,
         last_updated: row.last_updated
       };
     });
