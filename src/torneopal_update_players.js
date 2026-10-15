@@ -27,10 +27,11 @@ async function updatePlayer(player) {
     const data = typeof response.data === 'object' ? response.data : JSON.parse(response.data);
 
     if (data.call && data.call.status === 'OK' && data.player) {
-      const BirthYear = data.player.birthyear;
+      // Syntymävuosi voi puuttua (""), jolloin tallennetaan NULL – muuten INSERT kaatuu ja pelaaja jää pois
+      const BirthYear = parseInt(data.player.birthyear, 10) || null;
       await pool.query(
         'INSERT INTO players (firstname, lastname, player_id, birth_year, player_data, last_updated) VALUES (?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE birth_year = VALUES(birth_year), player_data = VALUES(player_data), last_updated = NOW()',
-        [player.first_name, player.last_name, player.player_id, BirthYear, JSON.stringify(data.player)]
+        [player.first_name || data.player.first_name, player.last_name || data.player.last_name, player.player_id, BirthYear, JSON.stringify(data.player)]
       );
 
     } else {
