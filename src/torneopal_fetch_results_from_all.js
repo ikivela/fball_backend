@@ -76,7 +76,7 @@ var saveGames = async function (game, season) {
   }
   let game_url = `${base_url}getMatch?match_id=${game.match_id}&api_key=${token}&club_id=${club_id}`;
   try {
-    var stats = await axios.post(game_url);
+    var stats = await axios.get(game_url);
     //console.log(`Fetched stats for game ${game.match_id} from API`);
     //console.log(`API response for game ${game.match_id}:`, stats.data);
     if (stats.data == 'Invalid key') throw new Error('Invalid API key');

@@ -81,7 +81,7 @@ var saveGames = async function (game, season) {
     // ja jos ei vieläkään onnistu, ohita ottelu eikä kaada koko ajoa
     let stats = null;
     for (let attempt = 1; attempt <= 2; attempt++) {
-      stats = await axios.post(game_url);
+      stats = await axios.get(game_url);
       if (stats.data == 'Invalid key') throw new Error('Invalid API key');
       if (stats.data && stats.data.match) break;
       console.warn(`No match data for game ${match_id} (attempt ${attempt}):`, JSON.stringify(stats.data && stats.data.call ? stats.data.call.status : stats.data).slice(0, 200));
@@ -130,7 +130,13 @@ var saveGames = async function (game, season) {
     const [rows, fields] = await pool.query(sql, values);
     if (rows.affectedRows > 0) console.log("Game", game.match_id, "saved to database");
   } catch (e) {
-    console.error(`Error fetching game ${match_id}:`, e.message);
+    const body = e.response ? JSON.stringify(e.response.data).slice(0, 300) : '';
+    console.error(`Error fetching game ${match_id}:`, e.message, body);
+    if (e.response && e.response.status === 401) {
+      console.error('API key rejected by Torneopal, aborting run. Check the token in .env.');
+      await pool.end();
+      process.exit(1);
+    }
   }
 }
 
