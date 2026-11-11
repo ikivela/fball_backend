@@ -2,6 +2,13 @@ const fs = require('fs');
 const mysql = require('mysql2/promise');
 require('dotenv').config()
 
+// Skripti poistaa ja luo kauden taulut uudelleen (DROP TABLE). Vaatii erillisen vahvistuksen,
+// jottei olemassa oleva data katoa vahingossa ajettaessa.
+if (!process.argv.includes('--drop-tables')) {
+  console.error('This script DROPS existing tables. Re-run with --drop-tables to confirm.');
+  process.exit(1);
+}
+
 // Create the connection pool. The pool-specific settings are the defaults
 const pool = mysql.createPool({
   host: process.env.DB_HOST,  user: process.env.DB_USER,

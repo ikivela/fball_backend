@@ -42,7 +42,13 @@ function getEnvVar(name, fallback = null, validator = null) {
   return value || fallback;
 }
 
-let current_season = getEnvVar('year', DateTime.local().year.toString(), validateYear);
+// Kauden taulu (kauden päättymisvuosi, esim. 2027 -> 2027_games). Torneopalin getMatches ei
+// palauta kautta, joten se on pakko antaa .env:ssä: kalenterivuosi olisi syksyllä väärä.
+const current_season = getEnvVar('year', null, validateYear);
+if (!current_season) {
+  console.error('Season year is required. Set the year environment variable (e.g. year=2027).');
+  process.exit(1);
+}
 
 // Remove default secrets for production safety
 var token = getEnvVar('token', null);
@@ -50,11 +56,14 @@ if (!token) {
   console.error('API token is required. Set the token environment variable.');
   process.exit(1);
 }
-var season = getEnvVar('season', '2025-2026');
+const isIsoDate = (value) => DateTime.fromISO(value).isValid;
 var default_start_date = DateTime.local().minus({ weeks: 2 }).toISODate();
 var default_end_date = DateTime.local().plus({ weeks: 2 }).toISODate();
-var start_date = getEnvVar('start_date', default_start_date);
-var end_date = getEnvVar('end_date', default_end_date);
+var start_date = getEnvVar('start_date', default_start_date, isIsoDate);
+var end_date = getEnvVar('end_date', default_end_date, isIsoDate);
+// Koko kauden aikaväli --all/--force-rewrite/--clear -ajoille
+const season_start_date = getEnvVar('season_start_date', null, isIsoDate);
+const season_end_date = getEnvVar('season_end_date', null, isIsoDate);
 var club_id = getEnvVar('your_club_id', null);
 if (!club_id) {
   console.error('Club ID is required. Set the club_id environment variable.');
@@ -219,6 +228,12 @@ async function insertIntoDatabase(year, games) {
     console.error(`Invalid year for table name: ${year}`);
     process.exit(1);
   }
+  // Älä koske kantaan, jos API ei palauttanut otteluita (esim. virhe tai hylätty avain):
+  // --clear tyhjentäisi muuten taulun eikä mitään tulisi tilalle
+  if (!Array.isArray(games) || games.length === 0) {
+    console.error('No games from API, database left unchanged');
+    return;
+  }
   const connection = await pool.getConnection();
   const tablename = `${year}_games`;
   await initGameTable(year); // Ensure the table is initialized
@@ -254,7 +269,10 @@ async function insertIntoDatabase(year, games) {
 async function doFetch() {
   try {
     var games = await getGames();
-    current_season = games.season + 1 || current_season; // Use the season from the fetched data if available
+    if (games.call && games.call.status === 'error') {
+      console.error('Torneopal API error:', games.call.error || games.call.error_message);
+      return;
+    }
     console.log(`Current season: ${current_season}`);
     await insertIntoDatabase(current_season, games.matches);
   } catch (e) {
@@ -269,8 +287,12 @@ const fetchAll = process.argv.includes('--all');
 
 // If --all, --force-rewrite or --clear, use full season date range
 if (fetchAll || forceRewrite || clearFirst) {
-  start_date = '2025-08-01';
-  end_date = '2026-05-30';
+  if (!season_start_date || !season_end_date) {
+    console.error('Set season_start_date and season_end_date in .env to use --all, --force-rewrite or --clear');
+    process.exit(1);
+  }
+  start_date = season_start_date;
+  end_date = season_end_date;
 }
 
 // Export for testing

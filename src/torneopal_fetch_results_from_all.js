@@ -74,16 +74,19 @@ var saveGames = async function (game, season) {
     console.error(`Invalid year for table name: ${season}`);
     process.exit(1);
   }
-  let game_url = `${base_url}getMatch?match_id=${game.match_id}&api_key=${token}&club_id=${club_id}`;
+  const match_id = game.match_id;
+  let game_url = `${base_url}getMatch?match_id=${match_id}&api_key=${token}&club_id=${club_id}`;
   try {
-    var stats = await axios.get(game_url);
-    //console.log(`Fetched stats for game ${game.match_id} from API`);
-    //console.log(`API response for game ${game.match_id}:`, stats.data);
+    const stats = await axios.get(game_url);
     if (stats.data == 'Invalid key') throw new Error('Invalid API key');
+    if (!stats.data || !stats.data.match) {
+      const call = stats.data && stats.data.call;
+      console.error(`Skipping game ${match_id}: no match data from API`, call ? (call.error || call.error_message || call.status) : '');
+      return;
+    }
     // Save to Database
     const tablename = `\`${season}_games\``;
     processEmptyToNull(stats.data.match);
-    var game = {};
     game = stats.data.match;
     const matchData = JSON.stringify(stats.data.match);
     //const matchData = stats.data.match;
@@ -120,26 +123,28 @@ var saveGames = async function (game, season) {
     const [rows, fields] = await pool.query(sql, values);
     if (rows.affectedRows > 0) console.log("Game", game.match_id, "saved to database");
   } catch (e) {
-    console.error(`Error fetching game ${game.match_id}:`, e.message);
+    const body = e.response ? JSON.stringify(e.response.data).slice(0, 300) : '';
+    console.error(`Error fetching game ${match_id}:`, e.message, body);
+    if (e.response && e.response.status === 401) {
+      console.error('API key rejected by Torneopal, aborting run. Check the token in .env.');
+      await pool.end();
+      process.exit(1);
+    }
   }
 }
 
-async function fetchStatsDB(from_date) {
-
-  var db_year = '2026';
-  const connection = pool.getConnection();
+async function fetchStatsDB(db_year) {
   const tablename = `\`${db_year}_games\``;
 
-  let sql = `SELECT * FROM ${tablename};`;
+  let sql = `SELECT match_id FROM ${tablename}`;
   let games = [];
   try {
-    const [rows, fields] = await pool.query(sql, []);
+    const [rows] = await pool.query(sql);
     games = rows;
-    console.log("Found %s games", games.length);
+    console.log("Found %s games in %s", games.length, tablename);
   } catch (e) {
     console.error(e);
   }
-  pool.releaseConnection(connection);
   for (const game of games) {
     await saveGames(game, db_year);
   }
@@ -157,14 +162,17 @@ async function fetchStatsDB(from_date) {
 
 }
 
-async function fetchTodaysResults(from_date) {
-  // from_date can be undefined or a string
-  let date = "all";
-
-  await fetchStatsDB(date);
+// Kausi: --year 2026 komentoriviltä tai .env:n year (kauden päättymisvuosi)
+async function fetchAllResults(year) {
+  const db_year = validateYear(String(year || ''));
+  if (!db_year) {
+    console.error(`Invalid season year: ${year}. Use --year yyyy or set year in .env.`);
+    process.exit(1);
+  }
+  await fetchStatsDB(db_year);
 }
 
-fetchTodaysResults(argv.from_date).catch((error) => {
+fetchAllResults(argv.year || process.env.year).catch((error) => {
   console.error(error);
 }).then(() => {
   process.exit(0);

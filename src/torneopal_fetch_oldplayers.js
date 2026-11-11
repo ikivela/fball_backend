@@ -24,23 +24,38 @@ if (!token) {
   process.exit(1);
 }
 
-var searchPlayer = async function (search_text, season, club_id) {
+// Haettava kilpailu (esim. sb2015 = kausi 2015-2016)
+const competition_id = getEnvVar('oldplayers_competition_id', null);
+if (!competition_id || !/^sb\d{4}\w*$/.test(competition_id)) {
+  console.error('Set oldplayers_competition_id in .env (e.g. oldplayers_competition_id=sb2015).');
+  process.exit(1);
+}
 
+var searchPlayer = async function (search_text, club_id) {
   try {
-
-    let response = await axios.get(`${base_url}/search?text=${encodeURIComponent(search_text)}&api_key=${token}&competition_id=sb2015&club_id=${club_id}`);
+    let response = await axios.get(`${base_url}/search?text=${encodeURIComponent(search_text)}&api_key=${token}&competition_id=${competition_id}&club_id=${club_id}`);
     return response.data;
   } catch (e) {
-    console.log(base_url);
-    console.error(e.message);
-    games = [];
+    console.error(`Search failed for ${search_text}:`, e.message);
+    return { results: [] };
   }
-
-  return games;
 };
 
+// Oman seuran joukkueet, joissa pelaaja on pelannut. Tilastoriveillä on vain team_id (ei seuraa),
+// joten seuran joukkueet päätellään otteluista ja joukkuelistasta.
+function ownTeamIds(playerdata, club) {
+  const ids = new Set();
+  for (const m of playerdata.matches || []) {
+    if (String(m.team_id) === String(m.team_A_id) && String(m.club_A_id) === String(club)) ids.add(String(m.team_id));
+    if (String(m.team_id) === String(m.team_B_id) && String(m.club_B_id) === String(club)) ids.add(String(m.team_id));
+  }
+  for (const t of playerdata.teams || []) {
+    if (String(t.club_id) === String(club)) ids.add(String(t.team_id));
+  }
+  return ids;
+}
+
 async function doFetch() {
-  var season = 'sb2014';
   var foundplayers = [];
   var not_found = [];
   var players = fs.readFileSync('./tmp/oldplayers.txt', 'utf-8').split('\n').filter(line => line.trim() !== '');
@@ -63,13 +78,12 @@ async function doFetch() {
 
 
   for (const playerName of players) {
-    var res = await searchPlayer(playerName, season, process.env.your_club_id);
-    // filter object with club_id 368
-    var players = res.results;
-    
-    if (players.length > 0) {
+    const res = await searchPlayer(playerName, process.env.your_club_id);
+    const results = (res && Array.isArray(res.results)) ? res.results : [];
 
-      for (const player of players) {
+    if (results.length > 0) {
+
+      for (const player of results) {
         var playerdata = null;
         // players is found from torneopal, now check if the player is in the specified club
         const apiurl = `https://salibandy-api.torneopal.fi/taso/rest/getPlayer?player_id=${player.id}&api_key=${token}`;
@@ -86,10 +100,10 @@ async function doFetch() {
             // Uppercase first letter of first and last name
             playerdata.first_name = playerdata.first_name.charAt(0).toUpperCase() + playerdata.first_name.slice(1).toLowerCase();
             playerdata.last_name = playerdata.last_name.charAt(0).toUpperCase() + playerdata.last_name.slice(1).toLowerCase();
-            // Remove player statistics if club_id is not in the statistics 
-            playerdata.statistics = playerdata.statistics.filter(stat => stat.team_id == process.env.your_club_id);
-            // Remove matches from matches array if club_id is not in the matches
-            playerdata.matches = playerdata.matches.filter(match => match.club_A_id == process.env.your_club_id || match.club_B_id == process.env.your_club_id);
+            // Säilytä vain oman seuran joukkueiden tilastot ja ottelut
+            const teamIds = ownTeamIds(playerdata, process.env.your_club_id);
+            playerdata.statistics = (playerdata.statistics || []).filter(stat => teamIds.has(String(stat.team_id)));
+            playerdata.matches = (playerdata.matches || []).filter(match => match.club_A_id == process.env.your_club_id || match.club_B_id == process.env.your_club_id);
 
             foundplayers.push(playerdata.last_name + ' ' + playerdata.first_name);
             // insert or update player to database
@@ -106,7 +120,7 @@ async function doFetch() {
           }
         } else {
           not_found.push(playerName);
-          console.log(`Player ${playerName} found but error fetching details: ${data.call.error}`);
+          console.log(`Player ${playerName} found but error fetching details: ${data.call ? data.call.error : 'no response'}`);
         }
       }
     } else {
@@ -119,6 +133,7 @@ async function doFetch() {
   console.log('Not found players:', not_found.length);
   fs.writeFileSync('./tmp/found_players.json', JSON.stringify(foundplayers, null, 2));
   fs.writeFileSync('./tmp/not_found_players.json', JSON.stringify(not_found, null, 2));
+  await pool.end();
 }
 
 

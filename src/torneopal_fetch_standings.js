@@ -31,36 +31,40 @@ if (!token) {
   console.error('API token is required. Set the token environment variable.');
   process.exit(1);
 }
-var season = getEnvVar('season', '2026-2027');
-var club_id = getEnvVar('your_club_id', '368');
-if (!club_id) {
-  console.error('Club ID is required. Set the club_id environment variable.');
+// Kausi .env:stä (esim. 2026-2027). Torneopalin kilpailutunnus on kauden alkuvuosi: sb2026.
+var season = getEnvVar('season', null);
+if (!season || !/^\d{4}-\d{4}$/.test(season)) {
+  console.error('Set season in .env (e.g. season=2026-2027).');
+  process.exit(1);
+}
+const competition_id = `sb${season.split('-')[0]}`;
+
+// Testityökalu yhden lohkon sarjataulukon hakuun:
+// node src/torneopal_fetch_standings.js <category_id> [group_id]
+const category_id = process.argv[2];
+const group_id = process.argv[3] || '1';
+if (!/^\d+$/.test(category_id || '') || !/^\d+$/.test(group_id)) {
+  console.error('Usage: node src/torneopal_fetch_standings.js <category_id> [group_id]');
   process.exit(1);
 }
 
-var basepath = './data/';
-
-// https://salibandy.api.torneopal.com/taso/rest/getGroup?competition_id=sb2023&category_id=875&group_id=1
-
-var getStandings = async function (cat_id) {
-
+var getStandings = async function (cat_id, grp_id) {
   try {
-
-    let response = await axios.get(`${base_url}/getGroup?competition_id=sb2023&category_id=${cat_id}&group_id=1&api_key=${token}`);
+    let response = await axios.get(`${base_url}getGroup?competition_id=${competition_id}&category_id=${cat_id}&group_id=${grp_id}&api_key=${token}`);
     return response.data;
   } catch (e) {
-    console.log(base_url);
     console.error(e.message);
-    games = [];
+    return null;
   }
-
-  return games;
 };
 
 async function doFetch() {
-  var standings = await getStandings(875);
+  const standings = await getStandings(category_id, group_id);
+  if (!standings || !standings.group) {
+    console.error('No standings found:', standings && standings.call ? standings.call.error || standings.call.error_message : '');
+    process.exit(1);
+  }
   console.log(standings.group.group_name, standings.group.teams.length);
-
 }
 
 doFetch();

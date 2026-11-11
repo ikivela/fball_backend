@@ -5,6 +5,8 @@ services:
   build :
     context: .
   image: fball_backend:latest
+  # .env ei ole imagessa (.dockerignore), vaan se luetaan käynnistettäessä
+  env_file: .env
   environment:
    - PORT=3000
   ports:

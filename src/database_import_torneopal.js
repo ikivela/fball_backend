@@ -1,7 +1,20 @@
 const fs = require('fs');
 const mysql = require('mysql2/promise');
 require('dotenv').config()
-let current_season = 2026;
+
+// Skripti poistaa ja luo kauden taulut uudelleen (DROP TABLE). Vaatii erillisen vahvistuksen,
+// jottei olemassa oleva data katoa vahingossa ajettaessa.
+if (!process.argv.includes('--drop-tables')) {
+  console.error('This script DROPS existing tables. Re-run with --drop-tables to confirm.');
+  process.exit(1);
+}
+
+// Tuotava kausi (kauden päättymisvuosi) .env:n year-muuttujasta
+const current_season = process.env.year;
+if (!/^\d{4}$/.test(current_season || '')) {
+  console.error('Set year in .env (e.g. year=2027).');
+  process.exit(1);
+}
 // Create the connection pool. The pool-specific settings are the defaults
 const pool = mysql.createPool({
   host: process.env.DB_HOST,  user: process.env.DB_USER,
@@ -121,6 +134,5 @@ async function initGameTable(_year) {
     matchdata JSON
     )
   `);
-:
   connection.release();
 }

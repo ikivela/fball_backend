@@ -8,7 +8,7 @@ dotenv.config();
 // Ympäristömuuttujat ja apumuuttujat
 const base_url = 'https://salibandy.api.torneopal.com/taso/rest/';
 const token = process.env.token;
-const season = process.env.season || '2025-2026';
+const season = process.env.season || '';
 const basepath = './data/';
 
 function validateYear(year) {

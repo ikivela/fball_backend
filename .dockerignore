@@ -1,3 +1,7 @@
 data/
 tmp/
 node_modules
+# Salaisuudet annetaan ajonaikaisesti (docker-compose env_file), ei imageen
+.env
+.env.*
+.git

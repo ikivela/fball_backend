@@ -9,7 +9,6 @@ const fs = require('fs');
 const path = require('path');
 const { DateTime } = require('luxon');
 const mysql = require('mysql2/promise');
-const bodyParser = require('body-parser');
 const cors = require('cors');
 const axios = require('axios');
 const crypto = require('crypto');
@@ -60,12 +59,21 @@ if (!token) {
 const app = express();
 app.disable('x-powered-by');
 app.set('view engine', 'ejs');
-app.use(bodyParser.json());
-app.use(
-  bodyParser.urlencoded({
-    extended: true,
-  })
-);
+// Välityspalvelimen (nginx) takana req.ip on aina välityspalvelimen osoite, jolloin
+// kirjautumisrajoitus lukitsisi kaikki käyttäjät. TRUST_PROXY=true: käytetään nginxin
+// X-Real-IP-otsaketta, mutta vain kun pyyntö tulee paikalliselta koneelta (muuten otsakkeen
+// voisi väärentää ottamalla yhteyden suoraan backendin porttiin).
+const trustProxy = process.env.TRUST_PROXY === 'true';
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+function clientIp(req) {
+  if (trustProxy && LOOPBACK.has(req.socket.remoteAddress)) {
+    const realIp = req.headers['x-real-ip'];
+    if (typeof realIp === 'string' && realIp.trim()) return realIp.trim();
+  }
+  return req.ip;
+}
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 // Tokenit tallennetaan kantaan SHA-256-tiivisteinä
 function hashToken(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
@@ -142,7 +150,8 @@ app.post('/login', async (req, res) => {
   if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
     return res.status(400).json({ error: 'Username and password required' });
   }
-  if (isLoginBlocked(req.ip)) {
+  const ip = clientIp(req);
+  if (isLoginBlocked(ip)) {
     return res.status(429).json({ error: 'Too many failed login attempts, try again later' });
   }
   try {
@@ -151,10 +160,10 @@ app.post('/login', async (req, res) => {
     // Tarkista salasana bcryptillä
     const match = rows.length > 0 && await bcrypt.compare(password, rows[0].password);
     if (!match) {
-      recordLoginFailure(req.ip);
+      recordLoginFailure(ip);
       return res.status(401).json({ error: 'Invalid username or password' });
     }
-    loginFailures.delete(req.ip);
+    loginFailures.delete(ip);
     // Uusi token jokaisella kirjautumisella, kantaan vain tiiviste
     const token = crypto.randomBytes(32).toString('hex');
     await pool.query('UPDATE users SET token = ?, valid_login = NOW() WHERE username = ?', [hashToken(token), username]);
@@ -373,16 +382,10 @@ app.get('/gamestats/', requireApiToken, async (req, res) => {
   if (year < 2024) sql = `SELECT * FROM \`${year}_games\` WHERE UniqueID = ?`;
   try {
     const [rows, fields] = await pool.query(sql, [gameid]);
-    let game = rows;
-    let data = {};
-    console.log("found gameid:", gameid);
-    if (game.length > 0 && year < 2024)
-      data = game[0].events;
-    else if (game.length > 0 && year >= 2024)
-      data = { match: { ...game[0].matchdata } };
-
-    if (data) return res.status(200).json(data);
-    else return res.status(404).end();
+    if (rows.length === 0) return res.status(404).json({ error: 'Game not found' });
+    const data = year < 2024 ? rows[0].events : (rows[0].matchdata ? { match: { ...rows[0].matchdata } } : null);
+    if (!data) return res.status(404).json({ error: 'Game data not found' });
+    return res.status(200).json(data);
   } catch (e) {
     console.error(e);
     return res.status(500).end();
@@ -418,6 +421,13 @@ app.get('/games/', requireApiToken, async (req, res) => {
     console.error(err);
     res.status(500).json({ error_message: 'Failed to fetch games' });
   }
+});
+
+// Virheet (esim. rikkinäinen JSON tai liian iso pyyntö) JSONina ilman pinonjälkeä
+app.use((err, req, res, next) => {
+  const status = err.status || err.statusCode || 500;
+  if (status >= 500) console.error(err);
+  res.status(status).json({ error: status >= 500 ? 'Internal server error' : (err.expose ? err.message : 'Bad request') });
 });
 
 /**
@@ -468,7 +478,6 @@ var getPlayers = async function (birth_year) {
       throw new Error('Invalid year for birth_year')
     }
   let players = [];
-  let gender = "";
   let tablename = `players`;
   let sql = `SELECT player_id, firstname, lastname, birth_year, player_data, last_updated FROM ${tablename}`;
   const queryParams = [];
@@ -484,10 +493,11 @@ var getPlayers = async function (birth_year) {
       let current_player = null; // null = ei pelaajadataa, tila tuntematon
       let club_name = '';
       let own_club = null; // onko pelaajan (viimeisin) kotiseura oma seura
+      let gender = '';
       if (row.player_data) {
         try {
           const pdata = row.player_data;
-          gender = row.player_data.gender;
+          gender = pdata.gender || '';
           current_player = isCurrentClubPlayer(pdata, row.last_updated);
           club_name = pdata.club_abbrevation || pdata.club_name || '';
           own_club = String(pdata.club_id) === ownClubId;
@@ -548,8 +558,8 @@ var getGames = async function (year) {
     if (year > 2023) {
       games = games.map((match) => {
         if (match.matchdata == undefined) {
-          console.warn(`No match data found for game ${match.date}`);
-          return {};
+          console.warn(`No match data found for game ${match.match_id} (${match.date})`);
+          return null;
         } else {
           const periodWins = getPeriodWinResult(match.matchdata);
           return {
@@ -570,7 +580,7 @@ var getGames = async function (year) {
             RinkName: match.matchdata.venue_name,
           };
         }
-      });
+      }).filter(Boolean); // otteluita ilman otteludataa ei palauteta tyhjinä objekteina
     } else {
       // map GameDate to yyyy-mm-dd format  
       for (let i = 0; i < games.length; i++) {

@@ -9,7 +9,10 @@ WORKDIR $APP_DIR
 ADD . $APP_DIR
 
 # Install dependencies
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev && chown -R node:node $APP_DIR
+
+# Älä aja palvelua rootina
+USER node
 
 EXPOSE 3000
 
